@@ -1,0 +1,10 @@
+# V artifacts
+.vir_cache/
+*.tmp.c
+*.exe
+virc
+virc.exe
+
+# Editor
+.vscode/
+.idea/
