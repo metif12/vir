@@ -31,6 +31,30 @@ fn main() {
 		}
 		exit(1)
 	}
-	eprintln('virc: usage: virc [--version] | [verify <file.vir>]')
+	if args[0] == 'opt' && (args.len == 2 || args.len == 3) {
+		src := os.read_file(args[1]) or {
+			eprintln('virc: cannot read ${args[1]}: ${err.msg()}')
+			exit(1)
+		}
+		mut m := ssa.module_from_text(src) or {
+			eprintln('virc: parse error: ${err.msg()}')
+			exit(1)
+		}
+		optimize.optimize(mut m)
+		out := ssa.module_to_text(m) or {
+			eprintln('virc: print error: ${err.msg()}')
+			exit(1)
+		}
+		if args.len == 3 {
+			os.write_file(args[2], out) or {
+				eprintln('virc: cannot write ${args[2]}: ${err.msg()}')
+				exit(1)
+			}
+			return
+		}
+		print(out)
+		return
+	}
+	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]]')
 	exit(1)
 }
