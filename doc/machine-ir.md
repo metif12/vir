@@ -39,12 +39,16 @@ register allocator (next) rewrites virtuals to physicals and stack
 slots; the naive fallback (every vreg is a stack slot) is always
 available and always correct.
 
-## Selector contract (amd64, integer subset)
+## Selector contract (amd64 + arm64, integer subset)
 
 Input: verified SSA with phis eliminated (run the default pipeline
-first; the selector errors on `phi`). Constants become `movi`;
-`add`/`sub`/`mul` become `mov` + the op; comparisons + branches become
-`cmp` + `setcc`/`jcc`/`jmp`; `ret` moves to `rax`; calls move arguments
+first; the selector errors on `phi`). One shared lowering shape covers
+both arches; only registers and the calling convention change
+(`MachineSelector`, dispatched by triple; `select_amd64` stays as a
+convenience wrapper). Constants become `movi`; `add`/`sub`/`mul`
+become `mov` + the op; comparisons + branches become `cmp` +
+`setcc`/`jcc`/`jmp`; `ret` moves to `rax`/`x0`; calls move arguments
 per the convention and emit `call`; phi elimination `assign` copies
 become `mov`. Types other than 1/2/4/8-byte ints and pointers are
-rejected with a clear error.
+rejected with a clear error. Wide immediates and frame binding are
+the emitter's job (M4), not the selector's.

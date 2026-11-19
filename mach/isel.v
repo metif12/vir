@@ -3,27 +3,32 @@ module mach
 import target
 import vssa.ssa
 
-// Amd64Selector lowers verified, phi-free integer SSA to machine IR.
-// Run the default optimizer pipeline first; phis, floats, aggregates,
-// and memory operations are rejected with clear errors.
-pub struct Amd64Selector {
-	triple target.Triple
-	cc     target.CallConv
+// MachineSelector lowers verified, phi-free integer SSA to machine IR
+// for amd64 and arm64. Run the default optimizer pipeline first; phis,
+// floats, aggregates, and memory operations are rejected with clear
+// errors. The lowering shape is shared: only registers and the calling
+// convention change per target (selected via the triple).
+pub struct MachineSelector {
+	triple  target.Triple
+	cc      target.CallConv
+	ret_reg target.PhysReg
 mut:
 	next_vreg int
 	sym       map[int]Reg
 }
 
-// select_amd64 lowers a module to amd64 machine IR.
-pub fn select_amd64(m &ssa.Module, t target.Triple) !MachineModule {
-	if t.arch != .amd64 {
-		return error('vir: amd64 selector cannot target ${t.arch}')
+// select_machine lowers a module to machine IR for the triple's arch.
+pub fn select_machine(m &ssa.Module, t target.Triple) !MachineModule {
+	if t.arch != .amd64 && t.arch != .arm64 {
+		return error('vir: machine selector supports amd64 and arm64, not ${t.arch}')
 	}
 	cc := target.callconv_for(t)!
-	mut sel := Amd64Selector{
-		triple: t
-		cc:     cc
-		sym:    map[int]Reg{}
+	ret_arch := t.arch
+	mut sel := MachineSelector{
+		triple:  t
+		cc:      cc
+		ret_reg: target.PhysReg{arch: ret_arch, index: 0}
+		sym:     map[int]Reg{}
 	}
 	mut out := MachineModule{
 		triple: '${t.arch}-${t.os}-${t.abi}'
@@ -34,8 +39,16 @@ pub fn select_amd64(m &ssa.Module, t target.Triple) !MachineModule {
 	return out
 }
 
+// select_amd64 lowers a module to amd64 machine IR.
+pub fn select_amd64(m &ssa.Module, t target.Triple) !MachineModule {
+	if t.arch != .amd64 {
+		return error('vir: amd64 selector cannot target ${t.arch}')
+	}
+	return select_machine(m, t)
+}
+
 // vreg_for returns the virtual register for an SSA value, creating it.
-fn (mut sel Amd64Selector) vreg_for(m &ssa.Module, id ssa.ValueID) !Reg {
+fn (mut sel MachineSelector) vreg_for(m &ssa.Module, id ssa.ValueID) !Reg {
 	if int(id) <= 0 || int(id) >= m.values.len {
 		return error('vir: bad value reference %v${int(id)}')
 	}
@@ -127,7 +140,7 @@ fn parse_const_int(s string) !i64 {
 }
 
 // select_func lowers one function.
-fn (mut sel Amd64Selector) select_func(m &ssa.Module, f ssa.Function) !MachineFunc {
+fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !MachineFunc {
 	mut out := MachineFunc{
 		name: f.name
 	}
@@ -207,7 +220,7 @@ fn (mut sel Amd64Selector) select_func(m &ssa.Module, f ssa.Function) !MachineFu
 
 // select_instr lowers one SSA instruction. blocks maps SSA block ids to
 // machine block ids within this function.
-fn (mut sel Amd64Selector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut out MachineFunc, blk int, blocks map[int]int) ! {
+fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut out MachineFunc, blk int, blocks map[int]int) ! {
 	if int(val_id) <= 0 || int(val_id) >= m.values.len {
 		return error('vir: bad instruction reference')
 	}
@@ -342,10 +355,9 @@ fn (mut sel Amd64Selector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut o
 			}
 			if instr.operands.len == 1 {
 				v := sel.vreg_for(m, instr.operands[0])!
-				rax := preg(target.PhysReg{arch: .amd64, index: 0})
 				emit << MachineInstr{
 					op:      .mov
-					dst:     rax
+					dst:     preg(sel.ret_reg)
 					has_dst: true
 					srcs:    [reg_operand(v)]
 				}
@@ -385,12 +397,11 @@ fn (mut sel Amd64Selector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut o
 				symbol: callee.name
 			}
 			if int(val.typ) != 0 {
-				rax := preg(target.PhysReg{arch: .amd64, index: 0})
 				emit << MachineInstr{
 					op:      .mov
 					dst:     dst
 					has_dst: true
-					srcs:    [reg_operand(rax)]
+					srcs:    [reg_operand(preg(sel.ret_reg))]
 				}
 			}
 		}
