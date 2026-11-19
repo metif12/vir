@@ -8,8 +8,11 @@
 - [ ] B3 object writer: COFF + MachO (post-1.0)
 
 ## Part 2 — vir
-- [x] M0 bootstrap: repo, v.mod, spec draft, CI to come
-- [ ] M1 `.vir` parser/printer + verifier + `vir-verify`
+- [x] M0 bootstrap: repo, v.mod, spec draft, `virc --version`
+- [x] M1 `.vir` parser/printer + verifier + `vir-verify` on corpus;
+  `virc opt` runs the vendored pass manager
+- [ ] M2 pass manager goldens + `vir-opt` determinism proofs
+  (pipeline live; golden outputs pending)
 - [ ] M2 pass manager + passes + `vir-opt`
 - [ ] M3 targets + ABIs + ISel + regalloc
 - [ ] M4 emitters + objects + `virc` (hello-world exe x3 OSes)
