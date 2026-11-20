@@ -1,0 +1,106 @@
+vir 1
+target os - arch - ptr 8 endian little
+type %t0 = void
+type %t1 = i32
+type %t2 = ptr %t1
+const %v1 %t1 "0"
+value %v2 unknown %t2 "" idx 0
+const %v3 %t1 "1"
+value %v4 unknown %t0 "" idx 1
+value %v5 unknown %t2 "" idx 2
+const %v6 %t1 "8"
+value %v7 unknown %t0 "" idx 3
+value %v8 unknown %t2 "" idx 4
+const %v9 %t1 "11"
+value %v10 unknown %t0 "" idx 5
+value %v11 unknown %t2 "" idx 6
+value %v12 unknown %t0 "" idx 7
+value %v14 unknown %t1 "" idx 9
+const %v15 %t1 "4"
+value %v18 unknown %t1 "" idx 12
+value %v20 unknown %t0 "" idx 14
+const %v21 %t1 "10"
+value %v23 unknown %t0 "" idx 16
+value %v25 unknown %t2 "" idx 18
+value %v26 unknown %t0 "" idx 19
+value %v28 unknown %t1 "" idx 21
+value %v31 unknown %t1 "" idx 24
+value %v33 unknown %t0 "" idx 26
+value %v34 unknown %t1 "" idx 27
+value %v35 unknown %t0 "" idx 28
+value %v37 unknown %t2 "" idx 30
+value %v38 unknown %t0 "" idx 31
+value %v40 unknown %t1 "" idx 33
+value %v43 unknown %t1 "" idx 36
+value %v45 unknown %t0 "" idx 38
+value %v46 unknown %t1 "" idx 39
+value %v47 unknown %t0 "" idx 40
+value %v49 unknown %t1 "" idx 42
+value %v50 unknown %t1 "" idx 43
+const %v52 %t1 "3"
+value %v55 unknown %t1 "" idx 47
+const %v56 %t1 "7"
+value %v58 unknown %t0 "" idx 49
+value %v60 unknown %t1 "" idx 51
+value %v62 unknown %t0 "" idx 53
+value %v64 unknown %t1 "" idx 55
+const %v66 %t1 "21"
+value %v67 phi_result %t1 ".phi_12" idx -1
+value %v68 unknown %t1 ".phi_12" idx -1
+value %v69 phi_result %t1 ".phi_1" idx -1
+value %v70 phi_result %t1 ".phi_1" idx -1
+value %v71 unknown %t1 ".phi_7" idx -1
+value %v72 phi_result %t1 ".phi_7" idx -1
+value %v73 phi_result %t1 ".phi_4" idx -1
+value %v74 phi_result %t1 ".phi_4" idx -1
+func 0 "main" -> %t1 linkage external callconv c_decl params ()
+@b0 "entry" :
+  %v75 = assign %t1, %v69, %v3
+  %v76 = assign %t1, %v70, %v1
+  %v13 = jmp %t0, @b1
+@b1 "loop_cond" :
+  %v16 = lt %t1, %v70, %v15
+  %v17 = br %t0, %v16, @b2, @b3
+@b2 "loop_body" :
+  %v19 = add %t1, %v70, %v3
+  %v77 = assign %t1, %v69, %v66
+  %v78 = assign %t1, %v70, %v19
+  %v24 = jmp %t0, @b1
+@b3 "loop_after" :
+  %v79 = assign %t1, %v73, %v6
+  %v80 = assign %t1, %v74, %v1
+  %v27 = jmp %t0, @b4
+@b4 "loop_cond" :
+  %v29 = lt %t1, %v74, %v15
+  %v30 = br %t0, %v29, @b5, @b6
+@b5 "loop_body" :
+  %v32 = add %t1, %v74, %v3
+  %v81 = assign %t1, %v73, %v9
+  %v82 = assign %t1, %v74, %v32
+  %v36 = jmp %t0, @b4
+@b6 "loop_after" :
+  %v83 = assign %t1, %v72, %v1
+  %v39 = jmp %t0, @b7
+@b7 "loop_cond" :
+  %v41 = lt %t1, %v72, %v3
+  %v42 = br %t0, %v41, @b8, @b9
+@b8 "loop_body" :
+  %v44 = add %t1, %v72, %v3
+  %v84 = assign %t1, %v72, %v44
+  %v48 = jmp %t0, @b7
+@b9 "loop_after" :
+  %v51 = add %t1, %v69, %v69
+  %v53 = gt %t1, %v51, %v52
+  %v54 = br %t0, %v53, @b10, @b11
+@b10 "then" :
+  %v57 = add %t1, %v73, %v56
+  %v85 = assign %t1, %v67, %v57
+  %v59 = jmp %t0, @b12
+@b11 "else" :
+  %v86 = assign %t1, %v67, %v69
+  %v63 = jmp %t0, @b12
+@b12 "merge" :
+  %v65 = ret %t1, %v67
+detached
+  %v22 = add %t1, %v9, %v21
+  %v61 = sub %t1, %v1, %v69

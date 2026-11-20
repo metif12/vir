@@ -1,0 +1,64 @@
+vir 1
+target os - arch - ptr 8 endian little
+type %t0 = void
+type %t1 = i32
+type %t2 = ptr %t1
+const %v1 %t1 "0"
+value %v2 unknown %t2 "" idx 0
+const %v3 %t1 "6"
+value %v4 unknown %t0 "" idx 1
+value %v5 unknown %t2 "" idx 2
+value %v6 unknown %t0 "" idx 3
+const %v8 %t1 "5"
+value %v10 unknown %t2 "" idx 6
+value %v11 unknown %t0 "" idx 7
+value %v13 unknown %t1 "" idx 9
+const %v14 %t1 "1"
+value %v17 unknown %t1 "" idx 12
+value %v19 unknown %t0 "" idx 14
+const %v20 %t1 "3"
+value %v21 unknown %t0 "" idx 15
+value %v23 unknown %t2 "" idx 17
+value %v24 unknown %t0 "" idx 18
+value %v26 unknown %t1 "" idx 20
+const %v27 %t1 "2"
+value %v30 unknown %t1 "" idx 23
+value %v32 unknown %t0 "" idx 25
+value %v33 unknown %t1 "" idx 26
+value %v35 unknown %t0 "" idx 28
+value %v37 unknown %t1 "" idx 30
+value %v39 phi_result %t1 ".phi_4" idx -1
+value %v40 phi_result %t1 ".phi_4" idx -1
+value %v41 phi_result %t1 ".phi_1" idx -1
+value %v42 phi_result %t1 ".phi_1" idx -1
+func 0 "main" -> %t1 linkage external callconv c_decl params ()
+@b0 "entry" :
+  %v43 = assign %t1, %v41, %v3
+  %v44 = assign %t1, %v42, %v1
+  %v12 = jmp %t0, @b1
+@b1 "loop_cond" :
+  %v15 = lt %t1, %v42, %v14
+  %v16 = br %t0, %v15, @b2, @b3
+@b2 "loop_body" :
+  %v18 = add %t1, %v42, %v14
+  %v45 = assign %t1, %v41, %v20
+  %v46 = assign %t1, %v42, %v18
+  %v22 = jmp %t0, @b1
+@b3 "loop_after" :
+  %v47 = assign %t1, %v39, %v41
+  %v48 = assign %t1, %v40, %v1
+  %v25 = jmp %t0, @b4
+@b4 "loop_cond" :
+  %v28 = lt %t1, %v40, %v27
+  %v29 = br %t0, %v28, @b5, @b6
+@b5 "loop_body" :
+  %v31 = add %t1, %v40, %v14
+  %v49 = assign %t1, %v39, %v3
+  %v50 = assign %t1, %v40, %v31
+  %v36 = jmp %t0, @b4
+@b6 "loop_after" :
+  %v38 = ret %t1, %v39
+detached
+  %v7 = alloca %t2
+  %v9 = store %t0, %v8, %v7
+  %v34 = sdiv %t1, %v33, %v14

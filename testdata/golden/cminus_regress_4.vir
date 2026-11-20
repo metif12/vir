@@ -1,0 +1,71 @@
+vir 1
+target os - arch - ptr 8 endian little
+type %t0 = void
+type %t1 = i32
+type %t2 = ptr %t1
+const %v1 %t1 "0"
+value %v2 unknown %t2 "" idx 0
+const %v3 %t1 "7"
+value %v4 unknown %t0 "" idx 1
+value %v5 unknown %t2 "" idx 2
+const %v6 %t1 "4"
+value %v7 unknown %t0 "" idx 3
+value %v8 unknown %t2 "" idx 4
+const %v9 %t1 "6"
+value %v10 unknown %t0 "" idx 5
+value %v11 unknown %t2 "" idx 6
+value %v12 unknown %t0 "" idx 7
+value %v14 unknown %t1 "" idx 9
+const %v15 %t1 "1"
+value %v18 unknown %t1 "" idx 12
+value %v20 unknown %t0 "" idx 14
+const %v21 %t1 "2"
+value %v22 unknown %t0 "" idx 15
+value %v24 unknown %t1 "" idx 17
+value %v25 unknown %t1 "" idx 18
+value %v27 unknown %t1 "" idx 20
+value %v30 unknown %t0 "" idx 23
+value %v31 unknown %t2 "" idx 24
+value %v32 unknown %t0 "" idx 25
+value %v34 unknown %t1 "" idx 27
+const %v35 %t1 "3"
+value %v38 unknown %t1 "" idx 30
+value %v40 unknown %t0 "" idx 32
+value %v41 unknown %t0 "" idx 33
+value %v43 unknown %t1 "" idx 35
+value %v45 phi_result %t1 ".phi_4" idx -1
+value %v46 phi_result %t1 ".phi_4" idx -1
+value %v47 phi_result %t1 ".phi_1" idx -1
+value %v48 phi_result %t1 ".phi_1" idx -1
+const %v49 %t1 "8"
+func 0 "main" -> %t1 linkage external callconv c_decl params ()
+@b0 "entry" :
+  %v50 = assign %t1, %v47, %v3
+  %v51 = assign %t1, %v48, %v1
+  %v13 = jmp %t0, @b1
+@b1 "loop_cond" :
+  %v16 = lt %t1, %v48, %v15
+  %v17 = br %t0, %v16, @b2, @b3
+@b2 "loop_body" :
+  %v19 = add %t1, %v48, %v15
+  %v52 = assign %t1, %v47, %v21
+  %v53 = assign %t1, %v48, %v19
+  %v23 = jmp %t0, @b1
+@b3 "loop_after" :
+  %v54 = assign %t1, %v45, %v47
+  %v55 = assign %t1, %v46, %v1
+  %v33 = jmp %t0, @b4
+@b4 "loop_cond" :
+  %v36 = lt %t1, %v46, %v35
+  %v37 = br %t0, %v36, @b5, @b6
+@b5 "loop_body" :
+  %v39 = add %t1, %v46, %v15
+  %v56 = assign %t1, %v45, %v6
+  %v57 = assign %t1, %v46, %v39
+  %v42 = jmp %t0, @b4
+@b6 "loop_after" :
+  %v44 = ret %t1, %v45
+detached
+  %v26 = mul %t1, %v9, %v47
+  %v28 = shl %t1, %v6, %v15
+  %v29 = shl %t1, %v26, %v35

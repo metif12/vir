@@ -1,0 +1,32 @@
+vir 1
+target os - arch - ptr 8 endian little
+type %t0 = void
+type %t1 = i32
+type %t2 = ptr %t1
+const %v1 %t1 "0"
+value %v2 unknown %t2 "" idx 0
+const %v3 %t1 "3"
+value %v4 unknown %t0 "" idx 1
+value %v5 unknown %t1 "" idx 2
+const %v6 %t1 "9"
+const %v9 %t1 "100"
+value %v11 unknown %t1 "" idx 6
+const %v14 %t1 "7"
+const %v17 %t1 "8"
+const %v20 %t1 "1"
+func 0 "main" -> %t1 linkage external callconv c_decl params ()
+@b0 "entry" :
+  %v8 = br %t0, %v1, @b1, @b2
+@b1 "then" :
+  %v10 = ret %t1, %v9
+@b2 "else" :
+  %v13 = br %t0, %v20, @b4, @b5
+@b4 "then" :
+  %v15 = ret %t1, %v14
+@b5 "else" :
+  %v18 = ret %t1, %v17
+detached
+  %v7 = gt %t1, %v3, %v6
+  %v12 = eq %t1, %v3, %v3
+  %v16 = jmp %t0, @b6
+  %v19 = ret %t1, %v1

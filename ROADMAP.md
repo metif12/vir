@@ -11,9 +11,9 @@
 - [x] M0 bootstrap: repo, v.mod, spec draft, `virc --version`
 - [x] M1 `.vir` parser/printer + verifier + `vir-verify` on corpus;
   `virc opt` runs the vendored pass manager
-- [ ] M2 pass manager goldens + `vir-opt` determinism proofs
-  (pipeline live; golden outputs pending)
-- [ ] M2 pass manager + passes + `vir-opt`
+- [x] M2 pass manager goldens + `vir-opt` determinism proofs
+  (15 frozen outputs; repeated runs byte-identical)
+- [x] M2 pass manager + passes + `vir-opt`
 - [x] M3 targets + ABIs + ISel + regalloc
 - [x] M4 emitters + objects + `virc` (hello-world exe x3 OSes)
   (ELF/COFF exes run and differential-tested; MachO exe link-validated with lld,

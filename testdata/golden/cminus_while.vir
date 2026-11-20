@@ -1,0 +1,37 @@
+vir 1
+target os - arch - ptr 8 endian little
+type %t0 = void
+type %t1 = i32
+type %t2 = ptr %t1
+const %v1 %t1 "0"
+value %v2 unknown %t2 "" idx 0
+value %v3 unknown %t0 "" idx 1
+value %v4 unknown %t2 "" idx 2
+value %v5 unknown %t0 "" idx 3
+value %v7 unknown %t1 "" idx 5
+const %v8 %t1 "5"
+value %v11 unknown %t1 "" idx 8
+value %v12 unknown %t1 "" idx 9
+value %v14 unknown %t0 "" idx 11
+value %v15 unknown %t1 "" idx 12
+const %v16 %t1 "1"
+value %v18 unknown %t0 "" idx 14
+value %v20 unknown %t1 "" idx 16
+value %v22 phi_result %t1 ".phi_1" idx -1
+value %v23 phi_result %t1 ".phi_1" idx -1
+func 0 "main" -> %t1 linkage external callconv c_decl params ()
+@b0 "entry" :
+  %v24 = assign %t1, %v22, %v1
+  %v25 = assign %t1, %v23, %v1
+  %v6 = jmp %t0, @b1
+@b1 "loop_cond" :
+  %v9 = lt %t1, %v22, %v8
+  %v10 = br %t0, %v9, @b2, @b3
+@b2 "loop_body" :
+  %v13 = add %t1, %v23, %v22
+  %v17 = add %t1, %v22, %v16
+  %v26 = assign %t1, %v22, %v17
+  %v27 = assign %t1, %v23, %v13
+  %v19 = jmp %t0, @b1
+@b3 "loop_after" :
+  %v21 = ret %t1, %v23
