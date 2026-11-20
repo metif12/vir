@@ -5,6 +5,7 @@ import vssa.optimize
 import vssa.ssa
 import pipeline
 import cminus
+import vmini
 
 const vir_version = '0.1.0'
 
@@ -93,6 +94,33 @@ fn main() {
 		print(text)
 		return
 	}
+	if args[0] == 'vmini' && (args.len == 2 || args.len == 3) {
+		src := os.read_file(args[1]) or {
+			eprintln('virc: cannot read ${args[1]}: ${err.msg()}')
+			exit(1)
+		}
+		funcs := vmini.parse(src) or {
+			eprintln('virc: vmini parse error: ${err.msg()}')
+			exit(1)
+		}
+		mut m := cminus.generate(funcs) or {
+			eprintln('virc: vmini codegen error: ${err.msg()}')
+			exit(1)
+		}
+		text := ssa.module_to_text(m) or {
+			eprintln('virc: print error: ${err.msg()}')
+			exit(1)
+		}
+		if args.len == 3 {
+			os.write_file(args[2], text) or {
+				eprintln('virc: cannot write ${args[2]}: ${err.msg()}')
+				exit(1)
+			}
+			return
+		}
+		print(text)
+		return
+	}
 	if args[0] == 'compile' && (args.len == 3 || args.len == 4) {
 		src := os.read_file(args[1]) or {
 			eprintln('virc: cannot read ${args[1]}: ${err.msg()}')
@@ -106,6 +134,6 @@ fn main() {
 		println('virc: wrote ${args[2]}')
 		return
 	}
-	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]]')
+	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]] | [vmini <in.v> [out.vir]]')
 	exit(1)
 }

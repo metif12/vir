@@ -19,8 +19,8 @@
   (ELF/COFF exes run and differential-tested; MachO exe link-validated with lld,
   not executable on this host)
 - [x] M5 `libvir` + `vir.h` (pure-C end-to-end)
-- [ ] M6 V dogfood + C-minus frontend vs gcc/clang
-  (C-minus frontend + gcc differential landed; V dogfood pending)
+- [x] M6 V dogfood + C-minus frontend vs gcc/clang
+  (C-minus vs gcc and V subset vs the stock V compiler both differential-tested)
 - [x] M7 fuzz + differential + benchmarks
 
 Post-v1: JIT, DWARF, riscv64, binary bitcode.
