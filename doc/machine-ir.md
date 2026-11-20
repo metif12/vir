@@ -26,6 +26,23 @@ parse error (riscv64 is explicitly post-v1).
 `assign_args` maps an argument-kind list to registers or stack offsets.
 Variadics and 128-bit returns are rejected for now.
 
+## Register allocation (linear scan)
+
+`vir/mach/regalloc.v` owns allocation; the machine IR carries it with
+no format change except stack-slot operands (`[fp+N]`).
+
+- Pool: caller-saved registers minus the return register
+  (`rcx rdx rsi rdi r8 r9 r10 r11` on amd64, `x1-x15` on arm64).
+  Excluding the return register keeps fixed call/return sequences
+  from ever colliding with allocated values.
+- Intervals over flattened block order. Any interval strictly
+  containing a call spills — arguments are consumed before the
+  clobber and results produced after it, so nothing else can break.
+- Linear scan with furthest-end spilling and mov-coalescing hints.
+- Rewrite maps every virtual to a register or a slot; afterwards
+  `assert_no_vregs` holds, which is M4's input invariant. Stack slots
+  are 8 bytes; `stack_slots` on the function sizes the frame.
+
 ## Machine IR
 
 One function = blocks of machine instructions over virtual registers.

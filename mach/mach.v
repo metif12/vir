@@ -83,9 +83,11 @@ pub enum OperandKind {
 	imm
 	mem
 	symbol
+	slot
 }
 
-// Operand is one machine instruction operand.
+// Operand is one machine instruction operand. Slots are spilled virtual
+// registers: `slot n` addresses `[fp + n*8]`, bound by frame lowering.
 pub struct Operand {
 pub:
 	kind   OperandKind
@@ -94,6 +96,12 @@ pub:
 	base   Reg
 	disp   int
 	symbol string
+	slot   int
+}
+
+// slot_operand creates a stack slot operand.
+pub fn slot_operand(slot int) Operand {
+	return Operand{kind: .slot, slot: slot}
 }
 
 // reg_operand creates a register operand.
@@ -117,16 +125,18 @@ pub fn sym_operand(name string) Operand {
 }
 
 // MachineInstr is one machine instruction. Jump and call targets are
-// block ids and symbol names; data operands live in srcs.
+// block ids and symbol names; data operands live in srcs. The destination
+// is an operand (register or stack slot) so spilled definitions need no
+// extra moves; instructions without a result leave has_dst false.
 pub struct MachineInstr {
-pub:
-	op     MachineOp
-	cond   Cond
-	dst    Reg
+pub mut:
+	op      MachineOp
+	cond    Cond
+	dst     Operand
 	has_dst bool
-	srcs   []Operand
-	target int
-	symbol string
+	srcs    []Operand
+	target  int
+	symbol  string
 }
 
 // MachineBlock is one machine basic block.
@@ -137,12 +147,15 @@ pub mut:
 	instrs []MachineInstr
 }
 
-// MachineFunc is one lowered function with its entry moves.
+// MachineFunc is one lowered function with its entry moves. After register
+// allocation params holds the (physical or slot) locations of the
+// incoming arguments, mirroring the entry moves.
 pub struct MachineFunc {
 pub mut:
 	name   string
-	params []Reg
+	params []Operand
 	blocks []MachineBlock
+	stack_slots int
 }
 
 // MachineModule is one lowered module.
@@ -170,6 +183,7 @@ fn operand_to_text(o Operand) string {
 		.imm { '${o.imm}' }
 		.mem { '[${reg_to_text(o.base)}+${o.disp}]' }
 		.symbol { '$${o.symbol}' }
+		.slot { '[fp+${o.slot * 8}]' }
 	}
 }
 
@@ -177,7 +191,7 @@ fn operand_to_text(o Operand) string {
 fn instr_to_text(i MachineInstr) string {
 	mut s := ''
 	if i.has_dst {
-		s += '${reg_to_text(i.dst)} = '
+		s += '${operand_to_text(i.dst)} = '
 	}
 	s += '${i.op}'
 	if i.op == .jcc {

@@ -167,7 +167,7 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 		_ = int_width(m, m.values[id].typ)!
 		out.blocks[0].instrs << MachineInstr{
 			op:      .movi
-			dst:     r
+			dst:     reg_operand(r)
 			has_dst: true
 			srcs:    [imm_operand(v)]
 		}
@@ -194,14 +194,14 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 		if loc.has_reg {
 			entry_moves << MachineInstr{
 				op:      .mov
-				dst:     r
+				dst:     reg_operand(r)
 				has_dst: true
 				srcs:    [reg_operand(preg(loc.reg))]
 			}
 		} else {
 			entry_moves << MachineInstr{
 				op:      .load
-				dst:     r
+				dst:     reg_operand(r)
 				has_dst: true
 				srcs:    [mem_operand(vreg(frame_ptr_vreg), loc.stack_offset)]
 			}
@@ -211,9 +211,9 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 	mut head := entry_moves
 	head << out.blocks[0].instrs
 	out.blocks[0].instrs = head
-	out.params = []Reg{}
+	out.params = []Operand{}
 	for p in f.params {
-		out.params << sel.vreg_for(m, p)!
+		out.params << reg_operand(sel.vreg_for(m, p)!)
 	}
 	return out
 }
@@ -248,13 +248,13 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			}
 			emit << MachineInstr{
 				op:      .mov
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [reg_operand(a)]
 			}
 			emit << MachineInstr{
 				op:      op
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [reg_operand(dst), reg_operand(b)]
 			}
@@ -266,13 +266,13 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			a := sel.vreg_for(m, instr.operands[0])!
 			emit << MachineInstr{
 				op:      .mov
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [reg_operand(a)]
 			}
 			emit << MachineInstr{
 				op:      .neg
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [reg_operand(dst)]
 			}
@@ -290,7 +290,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			emit << MachineInstr{
 				op:      .setcc
 				cond:    cond_for(instr.op)!
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 			}
 		}
@@ -357,7 +357,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				v := sel.vreg_for(m, instr.operands[0])!
 				emit << MachineInstr{
 					op:      .mov
-					dst:     preg(sel.ret_reg)
+					dst:     reg_operand(preg(sel.ret_reg))
 					has_dst: true
 					srcs:    [reg_operand(v)]
 				}
@@ -384,7 +384,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				if loc.has_reg {
 					emit << MachineInstr{
 						op:      .mov
-						dst:     preg(loc.reg)
+						dst:     reg_operand(preg(loc.reg))
 						has_dst: true
 						srcs:    [reg_operand(v)]
 					}
@@ -399,7 +399,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			if int(val.typ) != 0 {
 				emit << MachineInstr{
 					op:      .mov
-					dst:     dst
+					dst:     reg_operand(dst)
 					has_dst: true
 					srcs:    [reg_operand(preg(sel.ret_reg))]
 				}
@@ -412,7 +412,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			p := sel.vreg_for(m, instr.operands[0])!
 			emit << MachineInstr{
 				op:      .load
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [mem_operand(p, 0)]
 			}
@@ -437,7 +437,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			a := sel.vreg_for(m, instr.operands[1])!
 			emit << MachineInstr{
 				op:      .mov
-				dst:     d
+				dst:     reg_operand(d)
 				has_dst: true
 				srcs:    [reg_operand(a)]
 			}
@@ -450,7 +450,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			_ = int_width(m, instr.typ)!
 			emit << MachineInstr{
 				op:      .mov
-				dst:     dst
+				dst:     reg_operand(dst)
 				has_dst: true
 				srcs:    [reg_operand(a)]
 			}
