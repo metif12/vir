@@ -20,9 +20,14 @@ deeply V-coupled), `native_*.v`/`worker.v` (V runtime helpers),
 - `vssa/ssa/ssa.v`: `metif12/v` branch `vir-a1-ir-text`
   (upstream PR `vlang/v#32555`), commit `cc82bf5` (adds `ir_version`).
 - `vssa/ssa/ir_text.v`: same branch, commit `2e10578` (format +
-  detached section + generic value lines).
+  detached section + generic value lines), plus the review fixes from
+  commit `8124eec` (global pointer types, distinct registered type
+  identities). PR `vlang/v#32555` is still open awaiting re-review;
+  the fixes are already in `vssa_upstream_test.v`.
 - `optimize/*`: `metif12/v` branch `vir-a2-passmanager`
-  (upstream PR `vlang/v#32560`), commit `c44e366d06`.
+  (upstream PR `vlang/v#32560`), commit `c44e366d06`. The PR was closed
+  as integrated into `dev` as upstream commit `8d7431935` — verified
+  in `vlang/v` history (the source PR shows closed, not native merge).
 - Both branches share upstream base `986bf429cd`.
 
 ## Mechanical adaptation
