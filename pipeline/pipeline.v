@@ -25,6 +25,21 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 	mach.assert_no_vregs(mm)!
 	out := emit.emit_amd64(mm, t)!
 
+	match t.os {
+		.linux {
+			write_elf(out, path)!
+		}
+		.windows {
+			write_coff(out, path)!
+		}
+		else {
+			return error('vir: object writer for ${t.os} is not available yet')
+		}
+	}
+}
+
+// write_elf emits an ELF64 relocatable object.
+fn write_elf(out emit.EmitOutput, path string) ! {
 	mut elf := obj.ElfObject.new(obj.em_x86_64)
 	elf.text_data = out.text
 	// ELF reserves symbol index 0 for the null symbol, so emitter indices
@@ -44,4 +59,33 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 		elf.add_text_reloc(u64(r.offset), elf_idx[r.sym], r.typ, r.addend)
 	}
 	elf.write(path)!
+}
+
+// write_coff emits a Windows/amd64 COFF object. Unlike ELF Rela, COFF keeps
+// the addend inside the relocation field, so patch it into the text first.
+fn write_coff(out emit.EmitOutput, path string) ! {
+	mut coff := obj.CoffObject.new(obj.image_file_machine_amd64)
+	coff.text_data = out.text
+	for r in out.relocs {
+		v := u32(r.addend)
+		coff.text_data[r.offset] = u8(v)
+		coff.text_data[r.offset + 1] = u8(v >> 8)
+		coff.text_data[r.offset + 2] = u8(v >> 16)
+		coff.text_data[r.offset + 3] = u8(v >> 24)
+	}
+	mut coff_idx := []int{len: out.syms.len}
+	for i, sym in out.syms {
+		coff_idx[i] = if sym.is_undefined {
+			coff.add_undefined(sym.name)
+		} else {
+			coff.add_symbol(sym.name, u32(sym.offset), sym.is_func, 1)
+		}
+	}
+	for r in out.relocs {
+		if r.sym < 0 || r.sym >= coff_idx.len {
+			return error('vir: relocation at ${r.offset} names bad symbol ${r.sym}')
+		}
+		coff.add_text_reloc(r.offset, coff_idx[r.sym], obj.image_rel_amd64_rel32)
+	}
+	coff.write(path)!
 }

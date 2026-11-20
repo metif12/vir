@@ -16,7 +16,7 @@
 - [ ] M2 pass manager + passes + `vir-opt`
 - [x] M3 targets + ABIs + ISel + regalloc
 - [ ] M4 emitters + objects + `virc` (hello-world exe x3 OSes)
-  (ELF object emission via `virc` + `libvir` landed; cross-OS exe pending)
+  (ELF + COFF objects and native Linux/Windows exes landed; macOS MachO pending)
 - [x] M5 `libvir` + `vir.h` (pure-C end-to-end)
 - [ ] M6 V dogfood + C-minus frontend vs gcc/clang
   (C-minus frontend + gcc differential landed; V dogfood pending)
