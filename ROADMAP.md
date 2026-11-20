@@ -14,8 +14,9 @@
 - [ ] M2 pass manager goldens + `vir-opt` determinism proofs
   (pipeline live; golden outputs pending)
 - [ ] M2 pass manager + passes + `vir-opt`
-- [ ] M3 targets + ABIs + ISel + regalloc
+- [x] M3 targets + ABIs + ISel + regalloc
 - [ ] M4 emitters + objects + `virc` (hello-world exe x3 OSes)
+  (emitters + ELF objects landed; virc object emission in progress; cross-OS exe pending)
 - [ ] M5 `libvir` + `vir.h` (pure-C end-to-end)
 - [ ] M6 V dogfood + C-minus frontend vs gcc/clang
 - [ ] M7 fuzz + differential + benchmarks
