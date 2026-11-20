@@ -4,10 +4,11 @@ Simple SSA compiler backend written in V, with a stable C API.
 QBE-sized ambition: a large share of practical performance in a small,
 hackable, single-language codebase — with C bindings from day one.
 
-Status: M3/M5/M7 complete; M4 native executables on Linux (ELF) and Windows
-(COFF) landed (macOS MachO pending); M6 C-minus frontend + gcc differential
-landed (V dogfood pending). See `ROADMAP.md` for milestones and
-`doc/ir-spec.md` for the frozen IR grammar (v1).
+Status: M3/M5/M7 complete; M4 produces executables for Linux (ELF), Windows
+(COFF) and macOS (MachO) — the first two are run and differential-tested,
+the MachO output is link-validated but cannot run on this host; M6 C-minus
+frontend + gcc differential landed (V dogfood pending). See `ROADMAP.md`
+for milestones and `doc/ir-spec.md` for the frozen IR grammar (v1).
 
 ## Layout
 - `main.v` — `virc` driver: `--version`, `verify <file.vir>`,
@@ -18,7 +19,7 @@ landed (V dogfood pending). See `ROADMAP.md` for milestones and
 - `target/` — triple/ABI model
 - `mach/` — machine IR, ISel, linear-scan regalloc
 - `emit/` — amd64 emitter
-- `obj/` — ELF64 and Windows/amd64 COFF object writers
+- `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
 - `cminus/` — C-minus frontend (lexer, parser, AST -> `ssa.Module`)
@@ -43,9 +44,11 @@ Tracked in the same central issue; implemented as PRs from the V fork.
 
 ## Build
 Requires a stock V compiler on PATH. `virc compile <in.vir> <out.o> [triple]`
-emits an ELF64 object for `amd64-linux-gnu` or a COFF object for
-`amd64-windows-msvc`; both link to native executables with gcc. MachO is
-still pending. `virc cminus <in.c> [out.vir]` runs the C-minus frontend.
+emits an ELF64 object for `amd64-linux-gnu`, a COFF object for
+`amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
+two link and run with gcc; the MachO object links with `lld -flavor darwin`
+but cannot be executed on this host. `virc cminus <in.c> [out.vir]` runs the
+C-minus frontend.
 See `libvir/README.md` to build the C shared library, and run
 `v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
 (requires WSL with gcc); `v run tools/coff_diff.v` does the same with native

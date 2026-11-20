@@ -32,6 +32,9 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 		.windows {
 			write_coff(out, path)!
 		}
+		.macos {
+			write_macho(out, path)!
+		}
 		else {
 			return error('vir: object writer for ${t.os} is not available yet')
 		}
@@ -88,4 +91,28 @@ fn write_coff(out emit.EmitOutput, path string) ! {
 		coff.add_text_reloc(r.offset, coff_idx[r.sym], obj.image_rel_amd64_rel32)
 	}
 	coff.write(path)!
+}
+
+// write_macho emits a macOS/amd64 MachO object. x86_64 MachO relocations
+// carry their PC-relative addend implicitly, so the text is left as emitted.
+fn write_macho(out emit.EmitOutput, path string) ! {
+	mut mo := obj.MachObject.new()
+	mo.text_data = out.text
+	mut macho_idx := []int{len: out.syms.len}
+	for i, sym in out.syms {
+		// Darwin C symbols carry a leading underscore.
+		name := if sym.name.starts_with('_') { sym.name } else { '_' + sym.name }
+		macho_idx[i] = if sym.is_undefined {
+			mo.add_undefined(name)
+		} else {
+			mo.add_symbol(name, u64(sym.offset), sym.is_func)
+		}
+	}
+	for r in out.relocs {
+		if r.sym < 0 || r.sym >= macho_idx.len {
+			return error('vir: relocation at ${r.offset} names bad symbol ${r.sym}')
+		}
+		mo.add_text_reloc(r.offset, macho_idx[r.sym], r.typ)
+	}
+	mo.write(path)!
 }
