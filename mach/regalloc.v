@@ -249,7 +249,10 @@ fn allocate_func(f &MachineFunc, pool []target.PhysReg) (map[int]Reg, map[int]in
 				slots++
 				continue
 			}
+			// Drop the stale register mapping too: rewrite_operand prefers
+			// loc_reg, so leaving it would silently ignore this spill.
 			loc_slot[active[best].vreg] = slots
+			loc_reg.delete(active[best].vreg)
 			slots++
 			assigned = active[best].reg
 			active.delete(best)
