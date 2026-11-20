@@ -64,12 +64,12 @@ pub:
 
 // vreg creates a virtual register.
 pub fn vreg(id int) Reg {
-	return Reg{virt: id}
+	return Reg{ virt: id }
 }
 
 // preg creates a physical register operand.
 pub fn preg(r target.PhysReg) Reg {
-	return Reg{virt: -1, phys: r}
+	return Reg{ virt: -1, phys: r }
 }
 
 // is_phys reports whether a register is physical.
@@ -87,7 +87,14 @@ pub enum OperandKind {
 }
 
 // Operand is one machine instruction operand. Slots are spilled virtual
-// registers: `slot n` addresses `[fp + n*8]`, bound by frame lowering.
+// registers: `slot n` addresses `[rbp-(n+1)*8]`, bound by frame lowering.
+// A `mem` operand with the frame-pointer base uses a sign convention:
+// non-negative displacements address the incoming-argument area above
+// the frame pointer (`[rbp+16+disp]` on amd64), negative displacements
+// address the frame itself (`[rbp+disp]`). The selector only emits
+// non-negative fp displacements (stack argument slots); the allocator
+// only emits negative ones (spilled bases). A future GEP lowering must
+// preserve the sign (split the address computation if it would cross).
 pub struct Operand {
 pub:
 	kind   OperandKind
@@ -101,27 +108,27 @@ pub:
 
 // slot_operand creates a stack slot operand.
 pub fn slot_operand(slot int) Operand {
-	return Operand{kind: .slot, slot: slot}
+	return Operand{ kind: .slot, slot: slot }
 }
 
 // reg_operand creates a register operand.
 pub fn reg_operand(r Reg) Operand {
-	return Operand{kind: .reg, reg: r}
+	return Operand{ kind: .reg, reg: r }
 }
 
 // imm_operand creates an immediate operand.
 pub fn imm_operand(v i64) Operand {
-	return Operand{kind: .imm, imm: v}
+	return Operand{ kind: .imm, imm: v }
 }
 
 // mem_operand creates a base plus displacement operand.
 pub fn mem_operand(base Reg, disp int) Operand {
-	return Operand{kind: .mem, base: base, disp: disp}
+	return Operand{ kind: .mem, base: base, disp: disp }
 }
 
 // sym_operand creates a symbol operand.
 pub fn sym_operand(name string) Operand {
-	return Operand{kind: .symbol, symbol: name}
+	return Operand{ kind: .symbol, symbol: name }
 }
 
 // MachineInstr is one machine instruction. Jump and call targets are
@@ -152,9 +159,9 @@ pub mut:
 // incoming arguments, mirroring the entry moves.
 pub struct MachineFunc {
 pub mut:
-	name   string
-	params []Operand
-	blocks []MachineBlock
+	name        string
+	params      []Operand
+	blocks      []MachineBlock
 	stack_slots int
 }
 
@@ -181,7 +188,13 @@ fn operand_to_text(o Operand) string {
 	return match o.kind {
 		.reg { reg_to_text(o.reg) }
 		.imm { '${o.imm}' }
-		.mem { '[${reg_to_text(o.base)}+${o.disp}]' }
+		.mem {
+			if o.disp < 0 {
+				'[${reg_to_text(o.base)}${o.disp}]'
+			} else {
+				'[${reg_to_text(o.base)}+${o.disp}]'
+			}
+		}
 		.symbol { '$${o.symbol}' }
 		.slot { '[fp+${o.slot * 8}]' }
 	}

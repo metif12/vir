@@ -24,9 +24,9 @@ fn test_regalloc_no_spill_small() {
 	allocate(mut mm)!
 	assert_no_vregs(mm)!
 	text := mach_to_text(mm)
-	expected := 'machine amd64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n'
-		+ '  rcx = mov rdi\n' + '  rdx = mov rsi\n' + '  rsi = mov rcx\n'
-		+ '  rsi = add rsi, rdx\n' + '  rax = mov rsi\n' + '  ret\n'
+	expected := 'machine amd64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n' +
+		'  rcx = mov rdi\n' + '  rdx = mov rsi\n' + '  rsi = mov rcx\n' +
+		'  rsi = add rsi, rdx\n' + '  rax = mov rsi\n' + '  ret\n'
 	assert text == expected
 	assert mm.funcs[0].stack_slots == 0
 }
@@ -38,9 +38,9 @@ fn test_regalloc_no_spill_arm64() {
 	allocate(mut mm)!
 	assert_no_vregs(mm)!
 	text := mach_to_text(mm)
-	expected := 'machine arm64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n'
-		+ '  x1 = mov x0\n' + '  x2 = mov x1\n' + '  x3 = mov x1\n'
-		+ '  x3 = add x3, x2\n' + '  x0 = mov x3\n' + '  ret\n'
+	expected := 'machine arm64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n' +
+		'  x1 = mov x0\n' + '  x2 = mov x1\n' + '  x3 = mov x1\n' +
+		'  x3 = add x3, x2\n' + '  x0 = mov x3\n' + '  ret\n'
 	assert text == expected
 	assert mm.funcs[0].stack_slots == 0
 }
@@ -90,4 +90,31 @@ fn test_regalloc_spills_across_calls() {
 	// x is defined before the call and used after it, so it spills.
 	// The call result is produced after the call, so it takes a register.
 	assert mm.funcs[1].stack_slots == 1
+}
+
+fn test_regalloc_spilled_pointer_base_binds_frame() {
+	mut m := ssa.Module.new()
+	void_t := ssa.TypeID(0)
+	i32_t := m.type_store.get_int(32)
+	callee := m.new_function('ext', void_t)
+	centry := m.add_block(callee, 'entry')
+	m.add_instr(.ret, centry, void_t, [])
+	fid := m.new_function('main', i32_t)
+	x := m.add_value(.argument, i32_t, 'x', 0)
+	m.func_add_param(fid, x)
+	entry := m.add_block(fid, 'entry')
+	one := m.get_or_add_const(i32_t, '1')
+	ref := m.add_value(.func_ref, void_t, 'ext', callee)
+	_ = m.add_instr(.call, entry, void_t, [ref, x])
+	_ = m.add_instr(.store, entry, void_t, [one, x])
+	m.add_instr(.ret, entry, i32_t, [one])
+	t := target.parse_triple('amd64-linux-gnu')!
+	mut mm := select_machine(m, t)!
+	allocate(mut mm)!
+	assert_no_vregs(mm)!
+	// x (used by the call and the store) and the constant (materialized
+	// before the call, used after) both cross it, so both spill.
+	assert mm.funcs[1].stack_slots == 2
+	text := mach_to_text(mm)
+	assert text.contains('[fp-8]')
 }

@@ -17,8 +17,10 @@ deeply V-coupled), `native_*.v`/`worker.v` (V runtime helpers),
 
 ## From where
 
-- `ssa.v`, `ir_text.v`: `metif12/v` branch `vir-a1-ir-text`
-  (upstream PR `vlang/v#32555`), commit `2e10578`.
+- `vssa/ssa/ssa.v`: `metif12/v` branch `vir-a1-ir-text`
+  (upstream PR `vlang/v#32555`), commit `cc82bf5` (adds `ir_version`).
+- `vssa/ssa/ir_text.v`: same branch, commit `2e10578` (format +
+  detached section + generic value lines).
 - `optimize/*`: `metif12/v` branch `vir-a2-passmanager`
   (upstream PR `vlang/v#32560`), commit `c44e366d06`.
 - Both branches share upstream base `986bf429cd`.

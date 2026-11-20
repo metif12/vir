@@ -13,9 +13,9 @@ struct Interval {
 
 // Active is one live interval holding a pool register.
 struct Active {
-	end_  int
-	reg   int
-	vreg  int
+	end_ int
+	reg  int
+	vreg int
 }
 
 // reg_pool returns the allocatable caller-saved registers for a target.
@@ -24,20 +24,20 @@ struct Active {
 fn reg_pool(t target.Triple) ![]target.PhysReg {
 	if t.arch == .amd64 {
 		return [
-			target.PhysReg{arch: .amd64, index: 1},
-			target.PhysReg{arch: .amd64, index: 2},
-			target.PhysReg{arch: .amd64, index: 6},
-			target.PhysReg{arch: .amd64, index: 7},
-			target.PhysReg{arch: .amd64, index: 8},
-			target.PhysReg{arch: .amd64, index: 9},
-			target.PhysReg{arch: .amd64, index: 10},
-			target.PhysReg{arch: .amd64, index: 11},
+			target.PhysReg{ arch: .amd64, index: 1 },
+			target.PhysReg{ arch: .amd64, index: 2 },
+			target.PhysReg{ arch: .amd64, index: 6 },
+			target.PhysReg{ arch: .amd64, index: 7 },
+			target.PhysReg{ arch: .amd64, index: 8 },
+			target.PhysReg{ arch: .amd64, index: 9 },
+			target.PhysReg{ arch: .amd64, index: 10 },
+			target.PhysReg{ arch: .amd64, index: 11 },
 		]
 	}
 	if t.arch == .arm64 {
 		mut out := []target.PhysReg{}
 		for i in 1 .. 16 {
-			out << target.PhysReg{arch: .arm64, index: i}
+			out << target.PhysReg{ arch: .arm64, index: i }
 		}
 		return out
 	}
@@ -194,9 +194,9 @@ fn allocate_func(f &MachineFunc, pool []target.PhysReg) (map[int]Reg, map[int]in
 		}
 		loc_reg[iv.vreg] = preg(pool[assigned])
 		active << Active{
-			end_:  iv.end
-			reg:   assigned
-			vreg:  iv.vreg
+			end_: iv.end
+			reg:  assigned
+			vreg: iv.vreg
 		}
 	}
 	return loc_reg, loc_slot, slots
@@ -250,7 +250,7 @@ fn rewrite_operand(o Operand, loc_reg map[int]Reg, loc_slot map[int]int) !Operan
 			return mem_operand(r, o.disp)
 		}
 		if s := loc_slot[o.base.virt] {
-			return mem_operand(vreg(frame_ptr_vreg), s * 8 + o.disp)
+			return mem_operand(vreg(frame_ptr_vreg), o.disp - (s * 8 + 8))
 		}
 		return error('vir: unallocated virtual base %v${o.base.virt}')
 	}

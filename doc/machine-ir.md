@@ -29,7 +29,11 @@ Variadics and 128-bit returns are rejected for now.
 ## Register allocation (linear scan)
 
 `vir/mach/regalloc.v` owns allocation; the machine IR carries it with
-no format change except stack-slot operands (`[fp+N]`).
+no format change except stack-slot operands (`[fp+N]`, bound below
+the frame pointer as `[rbp-(n+1)*8]`) and `mem` operands with the
+frame-pointer base: non-negative displacements address the incoming
+stack-argument area (`[rbp+16+disp]` on amd64), negative displacements
+address the frame itself (`[rbp+disp]`, used for spilled pointer bases).
 
 - Pool: caller-saved registers minus the return register
   (`rcx rdx rsi rdi r8 r9 r10 r11` on amd64, `x1-x15` on arm64).
