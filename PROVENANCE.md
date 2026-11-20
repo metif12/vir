@@ -22,8 +22,10 @@ deeply V-coupled), `native_*.v`/`worker.v` (V runtime helpers),
 - `vssa/ssa/ir_text.v`: same branch, commit `2e10578` (format +
   detached section + generic value lines), plus the review fixes from
   commit `8124eec` (global pointer types, distinct registered type
-  identities). PR `vlang/v#32555` is still open awaiting re-review;
-  the fixes are already in `vssa_upstream_test.v`.
+  identities). PR `vlang/v#32555` is still open; a re-review request was
+  posted 2026-11-20 at
+  https://github.com/vlang/v/pull/32555#issuecomment-7047183205.
+  The fixes are also covered by `vssa_upstream_test.v`.
 - `optimize/*`: `metif12/v` branch `vir-a2-passmanager`
   (upstream PR `vlang/v#32560`), commit `c44e366d06`. The PR was closed
   as integrated into `dev` as upstream commit `8d7431935` — verified

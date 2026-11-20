@@ -2,7 +2,7 @@
 
 ## Part 1 — vlang/v readiness (PRs from fork)
 - [ ] A1 IR surface: spec, version const, `ir_text.v`, round-trips
-  (PR vlang/v#32555 open; review findings fixed in 8124eec, awaiting re-review)
+  (PR vlang/v#32555 open; findings fixed in 8124eec, re-review requested 2026-11-20)
 - [x] A2 pass manager, byte-identical pipeline
   (PR vlang/v#32560 integrated into dev as 8d7431935)
 - [ ] B1 V-ABI separation (post-1.0)
