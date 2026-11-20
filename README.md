@@ -21,6 +21,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `mach/` — machine IR, ISel, linear-scan regalloc
 - `emit/` — amd64 emitter
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
+- `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs)
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
 - `cminus/` — C-minus frontend (lexer, parser, AST -> `ssa.Module`)
@@ -53,8 +54,10 @@ Requires a stock V compiler on PATH. `virc compile <in.vir> <out.o> [triple]`
 emits an ELF64 object for `amd64-linux-gnu`, a COFF object for
 `amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
 two link and run with gcc; the MachO object links with `lld -flavor darwin`
-but cannot be executed on this host. `virc cminus <in.c> [out.vir]` runs the
-C-minus frontend; `virc vmini <in.v> [out.vir]` runs the V-subset frontend.
+but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit
+and subprogram info (no line tables yet), verifiable with `llvm-dwarfdump`.
+`virc cminus <in.c> [out.vir]` runs the C-minus frontend; `virc vmini <in.v>
+[out.vir]` runs the V-subset frontend.
 See `libvir/README.md` to build the C shared library, and run
 `v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
 (requires WSL with gcc); `v run tools/coff_diff.v` does the same with native

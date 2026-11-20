@@ -25,4 +25,5 @@
   (C-minus vs gcc and V subset vs the stock V compiler both differential-tested)
 - [x] M7 fuzz + differential + benchmarks
 
-Post-v1: JIT, DWARF, riscv64, binary bitcode.
+Post-v1 remaining: JIT, riscv64, binary bitcode.
+- [x] DWARF: compile-unit/subprogram DIEs in ELF objects (line tables pending)

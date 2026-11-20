@@ -10,6 +10,7 @@ import target
 import mach
 import emit
 import obj
+import dwarf
 
 // compile_module optimizes `m`, lowers it for `triple`, and writes an ELF64
 // relocatable object to `path`. In v1 only amd64 targets can be emitted.
@@ -45,6 +46,9 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 fn write_elf(out emit.EmitOutput, path string) ! {
 	mut elf := obj.ElfObject.new(obj.em_x86_64)
 	elf.text_data = out.text
+	dwarf_secs := dwarf.build(out.syms, 'vir 0.1.0', '.', 'vir-module')
+	elf.debug_info = dwarf_secs.info
+	elf.debug_abbrev = dwarf_secs.abbrev
 	// ELF reserves symbol index 0 for the null symbol, so emitter indices
 	// shift by one on their way into the object's symbol table.
 	mut elf_idx := []int{len: out.syms.len}

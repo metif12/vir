@@ -223,6 +223,35 @@ fn test_serialized_sections_roundtrip() {
 	assert cstr_at(buf, shstr_off + int(rd_u32(buf, stack_hdr))) == '.note.GNU-stack'
 }
 
+fn test_elf_with_debug_sections() {
+	mut e := ElfObject.new(em_x86_64)
+	e.text_data = [u8(0x90), 0xc3]
+	e.debug_info = [u8(1), 2, 3, 0]
+	e.debug_abbrev = [u8(4), 5, 6, 0]
+	path := tmp_obj_path('debug')
+	defer {
+		os.rm(path) or {}
+	}
+	e.write(path)!
+	buf := os.read_bytes(path)!
+
+	assert rd_u16(buf, 60) == 11 // nine base sections plus two DWARF ones
+	shoff := int(rd_u64(buf, 40))
+	shstr_hdr := shoff + 7 * 64
+	shstr_off := int(rd_u64(buf, shstr_hdr + 24))
+
+	info_hdr := shoff + 9 * 64
+	assert cstr_at(buf, shstr_off + int(rd_u32(buf, info_hdr))) == '.debug_info'
+	assert rd_u64(buf, info_hdr + 32) == 4
+	info_off := int(rd_u64(buf, info_hdr + 24))
+	assert buf[info_off..info_off + 4] == e.debug_info
+
+	abbrev_hdr := shoff + 10 * 64
+	assert cstr_at(buf, shstr_off + int(rd_u32(buf, abbrev_hdr))) == '.debug_abbrev'
+	abbrev_off := int(rd_u64(buf, abbrev_hdr + 24))
+	assert buf[abbrev_off..abbrev_off + 4] == e.debug_abbrev
+}
+
 fn test_write_failure_returns_error() {
 	mut e := ElfObject.new(em_x86_64)
 	missing := os.join_path(os.vtmp_dir(), 'vir_obj_no_such_dir', 'fail.o')
