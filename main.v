@@ -6,6 +6,7 @@ import vssa.ssa
 import pipeline
 import cminus
 import vmini
+import bitcode
 
 const vir_version = '0.1.0'
 
@@ -121,6 +122,51 @@ fn main() {
 		print(text)
 		return
 	}
+	if args[0] == 'bitcode' && args.len >= 3 {
+		if args[1] == 'encode' && args.len == 4 {
+			src := os.read_file(args[2]) or {
+				eprintln('virc: cannot read ${args[2]}: ${err.msg()}')
+				exit(1)
+			}
+			mut m := ssa.module_from_text(src) or {
+				eprintln('virc: parse error: ${err.msg()}')
+				exit(1)
+			}
+			bytes := bitcode.encode(m) or {
+				eprintln('virc: bitcode encode failed: ${err.msg()}')
+				exit(1)
+			}
+			os.write_file_array(args[3], bytes) or {
+				eprintln('virc: cannot write ${args[3]}: ${err.msg()}')
+				exit(1)
+			}
+			println('virc: wrote ${args[3]} (${bytes.len} bytes)')
+			return
+		}
+		if args[1] == 'decode' && (args.len == 3 || args.len == 4) {
+			bytes := os.read_bytes(args[2]) or {
+				eprintln('virc: cannot read ${args[2]}: ${err.msg()}')
+				exit(1)
+			}
+			mut m := bitcode.decode(bytes) or {
+				eprintln('virc: bitcode decode failed: ${err.msg()}')
+				exit(1)
+			}
+			text := ssa.module_to_text(m) or {
+				eprintln('virc: print error: ${err.msg()}')
+				exit(1)
+			}
+			if args.len == 4 {
+				os.write_file(args[3], text) or {
+					eprintln('virc: cannot write ${args[3]}: ${err.msg()}')
+					exit(1)
+				}
+				return
+			}
+			print(text)
+			return
+		}
+	}
 	if args[0] == 'compile' && (args.len == 3 || args.len == 4) {
 		src := os.read_file(args[1]) or {
 			eprintln('virc: cannot read ${args[1]}: ${err.msg()}')
@@ -134,6 +180,7 @@ fn main() {
 		println('virc: wrote ${args[2]}')
 		return
 	}
-	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]] | [vmini <in.v> [out.vir]]')
+	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]] | [vmini <in.v> [out.vir]]
+		| [bitcode encode <in.vir> <out.vbc>] | [bitcode decode <in.vbc> [out.vir]]')
 	exit(1)
 }

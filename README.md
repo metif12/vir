@@ -22,6 +22,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `emit/` — amd64 emitter
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
 - `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs)
+- `bitcode/` — binary IR v1 encoder/decoder for the SSA core
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
 - `cminus/` — C-minus frontend (lexer, parser, AST -> `ssa.Module`)
@@ -57,7 +58,10 @@ two link and run with gcc; the MachO object links with `lld -flavor darwin`
 but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit
 and subprogram info (no line tables yet), verifiable with `llvm-dwarfdump`.
 `virc cminus <in.c> [out.vir]` runs the C-minus frontend; `virc vmini <in.v>
-[out.vir]` runs the V-subset frontend.
+[out.vir]` runs the V-subset frontend. `virc bitcode encode <in.vir> <out.vbc>`
+and `virc bitcode decode <in.vbc> [out.vir]` convert between text IR and the
+v1 binary format (round-trips are byte-identical; globals and inline asm are
+out of scope).
 See `libvir/README.md` to build the C shared library, and run
 `v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
 (requires WSL with gcc); `v run tools/coff_diff.v` does the same with native
