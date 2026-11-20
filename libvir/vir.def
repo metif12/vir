@@ -1,0 +1,9 @@
+LIBRARY vir.dll
+EXPORTS
+    vir_abi_version
+    vir_parse
+    vir_optimize
+    vir_verify
+    vir_compile
+    vir_last_error
+    vir_module_free

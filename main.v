@@ -3,51 +3,17 @@ module main
 import os
 import vssa.optimize
 import vssa.ssa
-import target
-import mach
-import emit
-import obj
+import pipeline
 
 const vir_version = '0.1.0'
 
 // default_triple is the target used by `virc compile` unless overridden.
 const default_triple = 'amd64-linux-gnu'
 
-// compile_file parses `src`, runs the optimization pipeline, lowers it through
-// selection and register allocation, emits amd64 machine code, and writes an
-// ELF64 relocatable object to `path`.
+// compile_file parses `src` and hands it to the shared lowering pipeline.
 fn compile_file(src string, triple string, path string) ! {
-	t := target.parse_triple(triple)!
-	if t.arch != .amd64 {
-		return error('vir: object emission supports amd64 only, got ${t.arch}')
-	}
-
 	mut m := ssa.module_from_text(src)!
-	optimize.optimize(mut m)
-	mut mm := mach.select_machine(m, t)!
-	mach.allocate(mut mm)!
-	mach.assert_no_vregs(mm)!
-	out := emit.emit_amd64(mm, t)!
-
-	mut elf := obj.ElfObject.new(obj.em_x86_64)
-	elf.text_data = out.text
-	// ELF reserves symbol index 0 for the null symbol, so emitter indices
-	// shift by one on their way into the object's symbol table.
-	mut elf_idx := []int{len: out.syms.len}
-	for i, sym in out.syms {
-		elf_idx[i] = if sym.is_undefined {
-			elf.add_undefined(sym.name)
-		} else {
-			elf.add_symbol(sym.name, u64(sym.offset), sym.is_func, 1)
-		}
-	}
-	for r in out.relocs {
-		if r.sym < 0 || r.sym >= elf_idx.len {
-			return error('vir: relocation at ${r.offset} names bad symbol ${r.sym}')
-		}
-		elf.add_text_reloc(u64(r.offset), elf_idx[r.sym], r.typ, r.addend)
-	}
-	elf.write(path)!
+	pipeline.compile_module(mut m, triple, path)!
 }
 
 fn main() {

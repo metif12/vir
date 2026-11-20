@@ -5,6 +5,12 @@
 virc
 virc.exe
 
+# Shared-library build artifacts
+*.dll
+*.so
+*.a
+*.lib
+
 # Editor
 .vscode/
 .idea/
