@@ -4,9 +4,10 @@ Simple SSA compiler backend written in V, with a stable C API.
 QBE-sized ambition: a large share of practical performance in a small,
 hackable, single-language codebase — with C bindings from day one.
 
-Status: M3 complete; M4 ELF object emission via `virc` and `libvir` landed
-(cross-OS executables pending); M5 C API complete. See `ROADMAP.md` for
-milestones and `doc/ir-spec.md` for the frozen IR grammar (v1).
+Status: M3/M5 complete; M4 ELF object emission via `virc` and `libvir` landed
+(cross-OS executables pending); M6 C-minus frontend + gcc differential landed
+(V dogfood pending). See `ROADMAP.md` for milestones and `doc/ir-spec.md` for
+the frozen IR grammar (v1).
 
 ## Layout
 - `main.v` — `virc` driver: `--version`, `verify <file.vir>`,
@@ -20,7 +21,9 @@ milestones and `doc/ir-spec.md` for the frozen IR grammar (v1).
 - `obj/` — ELF64 object writer
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
-- `testdata/` — golden `.vir` corpus (`smoke.vir`)
+- `cminus/` — C-minus frontend (lexer, parser, AST -> `ssa.Module`)
+- `testdata/` — golden `.vir` corpus (`smoke.vir`) and C-minus fixtures
+- `tools/cminus_diff.v` — differential runner: vir vs gcc on the fixtures
 - `vir_smoke_test.v`, `corpus_test.v` — vendoring guards: build,
   optimize, verify, round-trip
 - `compile_test.v` — end-to-end compile-to-ELF-object tests
@@ -36,4 +39,7 @@ Tracked in the same central issue; implemented as PRs from the V fork.
 ## Build
 Requires a stock V compiler on PATH. `virc compile <in.vir> <out.o> [triple]`
 emits an ELF64 object for amd64-linux-gnu; full executable linking is
-still pending. See `libvir/README.md` to build the C shared library.
+still pending. `virc cminus <in.c> [out.vir]` runs the C-minus frontend.
+See `libvir/README.md` to build the C shared library, and run
+`v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
+(requires WSL with gcc).

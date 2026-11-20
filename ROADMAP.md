@@ -19,6 +19,7 @@
   (ELF object emission via `virc` + `libvir` landed; cross-OS exe pending)
 - [x] M5 `libvir` + `vir.h` (pure-C end-to-end)
 - [ ] M6 V dogfood + C-minus frontend vs gcc/clang
+  (C-minus frontend + gcc differential landed; V dogfood pending)
 - [ ] M7 fuzz + differential + benchmarks
 
 Post-v1: JIT, DWARF, riscv64, binary bitcode.

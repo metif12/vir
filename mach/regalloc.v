@@ -49,12 +49,72 @@ fn is_vreg_operand(o Operand) bool {
 	return o.kind == .reg && !o.reg.is_phys() && o.reg.virt >= 0
 }
 
+// extend_intervals_for_loops widens a vreg's live range when its last use can
+// reach a back-edge. Flat instruction order ends the interval at the last use,
+// but a loop re-enters the block containing that use, so the value stays live
+// through the loop body and its register must not be reused there.
+fn extend_intervals_for_loops(f &MachineFunc, mut ends map[int]int, use_block map[int]int) {
+	mut bstart := map[int]int{}
+	mut bend := map[int]int{}
+	mut pos := 0
+	for b in f.blocks {
+		bstart[b.id] = pos
+		pos += b.instrs.len
+		bend[b.id] = pos - 1
+	}
+
+	mut succ := map[int][]int{}
+	for i, b in f.blocks {
+		mut s := []int{}
+		for ins in b.instrs {
+			if (ins.op == .jmp || ins.op == .jcc) && ins.target in bstart {
+				s << ins.target
+			}
+		}
+		if b.instrs.len > 0 {
+			last := b.instrs[b.instrs.len - 1]
+			if last.op != .jmp && last.op != .ret && i + 1 < f.blocks.len {
+				s << f.blocks[i + 1].id
+			}
+		}
+		succ[b.id] = s
+	}
+
+	for v, blk in use_block {
+		base := bstart[blk]
+		mut seen := map[int]bool{}
+		mut queue := [blk]
+		mut has_back := false
+		mut max_end := ends[v]
+		for queue.len > 0 {
+			cur := queue.pop()
+			if seen[cur] {
+				continue
+			}
+			seen[cur] = true
+			if bend[cur] > max_end {
+				max_end = bend[cur]
+			}
+			for nxt in succ[cur] {
+				if bstart[nxt] <= base {
+					has_back = true
+				}
+				queue << nxt
+			}
+		}
+		if has_back {
+			ends[v] = max_end
+		}
+	}
+}
+
 // collect_intervals computes live ranges and call positions in flattened
 // block order.
 fn collect_intervals(f &MachineFunc) ([]Interval, []int) {
 	mut starts := map[int]int{}
 	mut ends := map[int]int{}
 	mut hints := map[int]int{}
+	mut use_block := map[int]int{}
 	mut calls := []int{}
 	mut pos := 0
 	for b in f.blocks {
@@ -78,6 +138,7 @@ fn collect_intervals(f &MachineFunc) ([]Interval, []int) {
 						starts[v] = pos
 					}
 					ends[v] = pos
+					use_block[v] = b.id
 				}
 				if s.kind == .mem && !s.base.is_phys() && s.base.virt >= 0 {
 					v := s.base.virt
@@ -93,6 +154,7 @@ fn collect_intervals(f &MachineFunc) ([]Interval, []int) {
 			pos++
 		}
 	}
+	extend_intervals_for_loops(f, mut ends, use_block)
 	mut intervals := []Interval{}
 	for v, s in starts {
 		h := hints[v] or { -1 }
