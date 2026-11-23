@@ -23,7 +23,9 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
 - `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs + line table)
 - `bitcode/` — binary IR v1 encoder/decoder for the SSA core
+- `jit/` — in-process JIT executor (Windows/amd64 v1, no externals)
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
+  (`compile_module` for objects, `lower_module` for the JIT)
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
 - `cminus/` — C-minus frontend (lexer, parser, AST -> `ssa.Module`)
 - `vmini/` — V-subset frontend for dogfooding (reuses the cminus AST/codegen)
@@ -64,7 +66,8 @@ file-path objects get a valid but empty line program.
 [out.vir]` runs the V-subset frontend. `virc bitcode encode <in.vir> <out.vbc>`
 and `virc bitcode decode <in.vbc> [out.vir]` convert between text IR and the
 v1 binary format (round-trips are byte-identical; globals and inline asm are
-out of scope).
+out of scope). `virc jit <in.c|in.v>` runs a C-minus or V-subset program
+in-process without writing an object file (Windows/amd64 v1, no externals).
 See `libvir/README.md` to build the C shared library, and run
 `v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
 (requires WSL with gcc); `v run tools/coff_diff.v` does the same with native

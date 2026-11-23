@@ -25,7 +25,8 @@
   (C-minus vs gcc and V subset vs the stock V compiler both differential-tested)
 - [x] M7 fuzz + differential + benchmarks
 
-Post-v1 remaining: JIT, riscv64.
+Post-v1 remaining: riscv64 (variable locations also pending).
+- [x] JIT: in-process execution on Windows/amd64 (internal calls, no externals)
 - [x] DWARF: compile-unit/subprogram DIEs plus line tables in ELF objects
   (in-memory frontend path; `.vir`/bitcode carry no lines, variable locations pending)
 - [x] binary bitcode: v1 SSA-core encode/decode, byte-identical round-trip

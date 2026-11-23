@@ -4,9 +4,11 @@ import os
 import vssa.optimize
 import vssa.ssa
 import pipeline
+import target
 import cminus
 import vmini
 import bitcode
+import jit
 
 const vir_version = '0.1.0'
 
@@ -122,6 +124,47 @@ fn main() {
 		print(text)
 		return
 	}
+	if args[0] == 'jit' && args.len == 2 {
+		src := os.read_file(args[1]) or {
+			eprintln('virc: cannot read ${args[1]}: ${err.msg()}')
+			exit(1)
+		}
+		funcs := if args[1].ends_with('.v') {
+			vmini.parse(src) or {
+				eprintln('virc: vmini parse error: ${err.msg()}')
+				exit(1)
+			}
+		} else {
+			cminus.parse(src) or {
+				eprintln('virc: cminus parse error: ${err.msg()}')
+				exit(1)
+			}
+		}
+		mut m := cminus.generate(funcs) or {
+			eprintln('virc: codegen error: ${err.msg()}')
+			exit(1)
+		}
+		// The JIT runs on the host, so lower for the host OS.
+		host_triple := if os.user_os() == 'windows' {
+			'amd64-windows-msvc'
+		} else {
+			'amd64-linux-gnu'
+		}
+		t := target.parse_triple(host_triple) or {
+			eprintln('virc: bad triple: ${err.msg()}')
+			exit(1)
+		}
+		out := pipeline.lower_module(mut m, t, map[int]int{}) or {
+			eprintln('virc: lowering failed: ${err.msg()}')
+			exit(1)
+		}
+		code := jit.run(&out, 'main') or {
+			eprintln('virc: jit failed: ${err.msg()}')
+			exit(1)
+		}
+		println('virc: exit ${code}')
+		return
+	}
 	if args[0] == 'bitcode' && args.len >= 3 {
 		if args[1] == 'encode' && args.len == 4 {
 			src := os.read_file(args[2]) or {
@@ -180,7 +223,7 @@ fn main() {
 		println('virc: wrote ${args[2]}')
 		return
 	}
-	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]] | [vmini <in.v> [out.vir]]
+	eprintln('virc: usage: virc [--version] | [verify <file.vir>] | [opt <file.vir> [out.vir]] | [compile <in.vir> <out.o> [triple]] | [cminus <in.c> [out.vir]] | [vmini <in.v> [out.vir]] | [jit <in.c|in.v>]
 		| [bitcode encode <in.vir> <out.vbc>] | [bitcode decode <in.vbc> [out.vir]]')
 	exit(1)
 }

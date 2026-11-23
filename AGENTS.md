@@ -28,6 +28,8 @@ V-native SSA compiler backend. Stock **V 0.5.2** on PATH is required.
   is only a parser over it.
 - `bitcode/` v1 encodes the SSA core only; `encode` rejects globals and inline
   asm by design — don't "fix" the rejection, extend the format version instead.
+- `jit/` runs Windows/amd64 only and rejects external symbols by design;
+  execution happens in-process, there is no object file to inspect.
 - `tools/*.v` run via `v run tools/<name>.v`. `cminus_diff`, `fuzz_diff`,
   `vmini_diff` need WSL with gcc; `coff_diff` runs native Windows exes;
   MachO output is link-validated only (`lld -flavor darwin`), it cannot execute

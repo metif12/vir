@@ -29,10 +29,7 @@ pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines 
 	}
 
 	optimize.optimize(mut m)
-	mut mm := mach.select_machine_lines(m, t, lines)!
-	mach.allocate(mut mm)!
-	mach.assert_no_vregs(mm)!
-	out := emit.emit_amd64(mm, t)!
+	out := lower_module(mut m, t, lines)!
 
 	match t.os {
 		.linux {
@@ -48,6 +45,16 @@ pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines 
 			return error('vir: object writer for ${t.os} is not available yet')
 		}
 	}
+}
+
+// lower_module optimizes `m` and lowers it for `triple`, returning the raw
+// emission for object writers and the JIT without touching the filesystem.
+pub fn lower_module(mut m ssa.Module, t target.Triple, lines map[int]int) !emit.EmitOutput {
+	optimize.optimize(mut m)
+	mut mm := mach.select_machine_lines(m, t, lines)!
+	mach.allocate(mut mm)!
+	mach.assert_no_vregs(mm)!
+	return emit.emit_amd64(mm, t)!
 }
 
 // write_elf emits an ELF64 relocatable object.
