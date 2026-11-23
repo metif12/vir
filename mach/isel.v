@@ -227,8 +227,10 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 	head << out.blocks[0].instrs
 	out.blocks[0].instrs = head
 	out.params = []Operand{}
+	out.param_names = []string{}
 	for p in f.params {
 		out.params << reg_operand(sel.vreg_for(m, p)!)
+		out.param_names << m.values[int(p)].name
 	}
 	return out
 }

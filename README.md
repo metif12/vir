@@ -21,7 +21,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `mach/` — machine IR, ISel, linear-scan regalloc
 - `emit/` — amd64 and RV64I emitters (+ `riscv64_test.v` encoding goldens)
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
-- `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs + line table)
+- `dwarf/` — minimal DWARF 4 producer (unit + subprograms + line table + parameter variables)
 - `bitcode/` — binary IR v1 encoder/decoder for the SSA core
 - `jit/` — in-process JIT executor (Windows/amd64 v1, no externals)
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
@@ -58,10 +58,12 @@ emits an ELF64 object for `amd64-linux-gnu` or `riscv64-linux-gnu`, a COFF objec
 `amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
 two link and run with gcc; the MachO object links with `lld -flavor darwin`
 but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit,
-subprogram and line-table info, verifiable with `llvm-dwarfdump`. Line rows
-exist only for modules compiled from a frontend AST in memory (`generate_with_lines`
-+ `compile_module_lines`): `.vir` text and bitcode v1 carry no source lines, so
-file-path objects get a valid but empty line program.
+subprogram, line-table and parameter-variable info, verifiable with
+`llvm-dwarfdump`. Line rows exist only for modules compiled from a frontend
+AST in memory (`generate_with_lines` + `compile_module_lines`): `.vir` text
+and bitcode v1 carry no source lines, so file-path objects get a valid but
+empty line program. Variable entries describe parameters at their entry
+locations; location lists for moved values are future work.
 `virc cminus <in.c> [out.vir]` runs the C-minus frontend; `virc vmini <in.v>
 [out.vir]` runs the V-subset frontend. `virc bitcode encode <in.vir> <out.vbc>`
 and `virc bitcode decode <in.vbc> [out.vir]` convert between text IR and the

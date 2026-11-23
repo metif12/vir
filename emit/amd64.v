@@ -21,6 +21,7 @@ pub mut:
 	offset       u32
 	size         u32
 	is_undefined bool
+	params       []EmitParam
 }
 
 // EmitReloc is one relocation against the text section: offset is the byte
@@ -32,6 +33,18 @@ pub mut:
 	sym    int
 	typ    int
 	addend i64
+}
+
+// EmitParam is one source-level function parameter with its entry location
+// for DWARF variable DIEs. Register locations use DWARF register numbers;
+// offset locations use a base register plus a frame-relative offset.
+pub struct EmitParam {
+pub mut:
+	name   string
+	is_reg bool
+	reg    int
+	breg   int
+	offset i32
 }
 
 // LineRow maps one text-section offset to its 1-based source line: the
@@ -146,6 +159,8 @@ fn (mut e Emitter) emit_func(f mach.MachineFunc) ! {
 		stack_slots: f.stack_slots
 		block_offs:  map[int]int{}
 	}
+	// Entry locations for DWARF variable DIEs, resolved against the frame.
+	e.syms[sym].params = e.debug_params(f, ctx)!
 	for b in f.blocks {
 		ctx.block_offs[b.id] = e.text.len
 		for ins in b.instrs {
@@ -823,7 +838,43 @@ fn (e &Emitter) mem_addr(o mach.Operand, ctx FuncCtx) !(int, int) {
 	return base_hw, o.disp
 }
 
-// cc_byte maps a condition to its setcc opcode byte; jcc uses byte - 0x10.
+// amd64_dwarf_reg maps an amd64 hardware register index to its DWARF
+// register number. The orders differ (hw: rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi;
+// DWARF: rax,rdx,rcx,rbx,rsi,rdi,rbp,rsp, then r8-r15 in order).
+fn amd64_dwarf_reg(hw int) !int {
+	table := [0, 2, 1, 3, 7, 6, 4, 5, 8, 9, 10, 11, 12, 13, 14, 15]
+	if hw < 0 || hw >= table.len {
+		return error('vir: bad amd64 register index ${hw}')
+	}
+	return table[hw]
+}
+
+// debug_params maps each function parameter to its DWARF entry location:
+// a register number, or a frame-base-relative offset. mem_addr already
+// resolves slots and fp-relative memory to (rbp, disp).
+fn (e &Emitter) debug_params(f mach.MachineFunc, ctx FuncCtx) ![]EmitParam {
+	mut out := []EmitParam{}
+	for i, p in f.params {
+		name := if i < f.param_names.len { f.param_names[i] } else { 'arg${i}' }
+		if p.kind == .reg {
+			if !p.reg.is_phys() {
+				return error('vir: amd64 parameter in virtual register')
+			}
+			out << EmitParam{ name: name, is_reg: true, reg: amd64_dwarf_reg(p.reg.phys.index)! }
+		} else if p.kind == .mem || p.kind == .slot {
+			base_hw, disp := e.mem_addr(p, ctx)!
+			out << EmitParam{
+				name:   name
+				breg:   amd64_dwarf_reg(base_hw)!
+				offset: i32(disp)
+			}
+		} else {
+			return error('vir: cannot describe amd64 parameter location')
+		}
+	}
+	return out
+}
+
 fn cc_byte(c mach.Cond) u8 {
 	return match c {
 		.eq { 0x94 }

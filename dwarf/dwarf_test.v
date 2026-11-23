@@ -81,3 +81,45 @@ fn test_dwarf_skips_undefined_symbols() {
 	assert secs.info.bytestr().contains('main')
 	assert !secs.info.bytestr().contains('puts')
 }
+
+fn find_bytes(b []u8, pat []u8) int {
+	if pat.len == 0 || b.len < pat.len {
+		return -1
+	}
+	for i in 0 .. b.len - pat.len + 1 {
+		mut ok := true
+		for j in 0 .. pat.len {
+			if b[i + j] != pat[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return i
+		}
+	}
+	return -1
+}
+
+fn test_dwarf_variable_entries() {
+	syms := [
+		emit.EmitSym{
+			name:    'add'
+			is_func: true
+			offset:  0
+			size:    12
+			params:  [
+				emit.EmitParam{ name: 'a', is_reg: true, reg: 7 },
+				emit.EmitParam{ name: 'b', breg: 6, offset: 24 },
+			]
+		},
+	]
+	secs := build(syms, []emit.LineRow{}, 'vir', '.', 'm')
+	// Variable DIE for `a`: abbrev 3, name, exprloc length 1, DW_OP_reg7.
+	assert find_bytes(secs.info, [u8(3), `a`, 0, 1, 0x57]) >= 0
+	// Variable DIE for `b`: DW_OP_breg6(0x76) plus SLEB128(24).
+	assert find_bytes(secs.info, [u8(3), `b`, 0, 2, 0x76, 24]) >= 0
+	// Subprogram children are terminated, then the CU children.
+	last := secs.info[secs.info.len - 2..]
+	assert last == [u8(0), u8(0)]
+}

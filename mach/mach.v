@@ -159,11 +159,13 @@ pub mut:
 
 // MachineFunc is one lowered function with its entry moves. After register
 // allocation params holds the (physical or slot) locations of the
-// incoming arguments, mirroring the entry moves.
+// incoming arguments, mirroring the entry moves. param_names carries the
+// source-level parameter names in the same order for DWARF variable DIEs.
 pub struct MachineFunc {
 pub mut:
 	name        string
 	params      []Operand
+	param_names []string
 	blocks      []MachineBlock
 	stack_slots int
 }

@@ -78,6 +78,8 @@ fn (mut e RiscvEmitter) emit_func(f mach.MachineFunc) ! {
 		frame:       frame
 		block_offs:  map[int]int{}
 	}
+	// Entry locations for DWARF variable DIEs, resolved against the frame.
+	e.syms[sym].params = e.debug_params(f, ctx)!
 	for b in f.blocks {
 		ctx.block_offs[b.id] = e.text.len
 		// Explicit index: a fused cmp consumes its setcc/jcc consumer, so
@@ -149,7 +151,28 @@ fn (mut e RiscvEmitter) emit_instr(ins mach.MachineInstr, mut ctx FuncCtx) ! {
 	}
 }
 
-// resolve_mem maps a slot or memory operand to (base register, disp).
+// debug_params maps each function parameter to its DWARF entry location:
+// a register number, or a frame-base-relative offset. RISC-V hardware
+// numbers already match the DWARF numbering (x0-x31).
+fn (mut e RiscvEmitter) debug_params(f mach.MachineFunc, ctx FuncCtx) ![]EmitParam {
+	mut out := []EmitParam{}
+	for i, p in f.params {
+		name := if i < f.param_names.len { f.param_names[i] } else { 'arg${i}' }
+		if p.kind == .reg {
+			if !p.reg.is_phys() {
+				return error('vir: riscv64 parameter in virtual register')
+			}
+			out << EmitParam{ name: name, is_reg: true, reg: p.reg.phys.index }
+		} else if p.kind == .mem || p.kind == .slot {
+			base, disp := e.resolve_mem(p, ctx)!
+			out << EmitParam{ name: name, breg: base, offset: disp }
+		} else {
+			return error('vir: cannot describe riscv64 parameter location')
+		}
+	}
+	return out
+}
+
 // Slots bind below the saved ra/fp pair: slot n lives at [fp-(n+3)*8],
 // leaving [fp-8] and [fp-16] for the callee-saved pair. Memory with the
 // fp placeholder base addresses the frame itself for negative

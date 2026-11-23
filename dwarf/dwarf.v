@@ -9,8 +9,10 @@ import emit
 
 const tag_compile_unit = 0x11
 const tag_subprogram = 0x2e
+const tag_variable = 0x34
 
 const at_name = 0x03
+const at_location = 0x02
 const at_language = 0x13
 const at_comp_dir = 0x1b
 const at_producer = 0x25
@@ -27,6 +29,7 @@ const form_string = 0x08
 const form_data1 = 0x0b
 const form_flag_present = 0x19
 const form_sec_offset = 0x17
+const form_exprloc = 0x18
 
 // Line program opcodes used by build_line.
 const lns_copy = 0x01
@@ -114,15 +117,25 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 	put_pair(mut ab, at_stmt_list, form_sec_offset)
 	ab << u8(0)
 	ab << u8(0)
-	// Abbrev 2: DW_TAG_subprogram, no children.
+	// Abbrev 2: DW_TAG_subprogram, has children (the parameter variables).
 	ab << u8(2)
 	ab << u8(tag_subprogram)
-	ab << u8(0)
+	ab << u8(1)
 	put_pair(mut ab, at_name, form_string)
 	put_pair(mut ab, at_decl_line, form_data2)
 	put_pair(mut ab, at_low_pc, form_addr)
 	put_pair(mut ab, at_high_pc, form_data4)
 	put_pair(mut ab, at_external, form_flag_present)
+	ab << u8(0)
+	ab << u8(0)
+	// Abbrev 3: DW_TAG_variable, no children. The location is an entry
+	// location (function parameters live there on entry); location lists
+	// for values that move are post-v1 work.
+	ab << u8(3)
+	ab << u8(tag_variable)
+	ab << u8(0)
+	put_pair(mut ab, at_name, form_string)
+	put_pair(mut ab, at_location, form_exprloc)
 	ab << u8(0)
 	ab << u8(0)
 	ab << u8(0) // end of abbreviation table
@@ -165,6 +178,15 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 		put_u32(mut die, s.size)
 		// DW_AT_external uses DW_FORM_flag_present: the abbreviation itself
 		// carries the truth value, so no byte is emitted here.
+		for p in s.params {
+			die << u8(3)
+			die << p.name.bytes()
+			die << u8(0)
+			expr := param_expr(p)
+			put_uleb(mut die, u64(expr.len))
+			die << expr
+		}
+		die << u8(0) // end of subprogram children
 	}
 	die << u8(0) // end of compile-unit children
 
@@ -179,6 +201,19 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 	info << die
 
 	return DwarfSections{ info: info, abbrev: ab, line: line }
+}
+
+// param_expr encodes one parameter's entry location as a DWARF expression:
+// DW_OP_regN for registers, DW_OP_bregN plus a signed offset otherwise.
+fn param_expr(p emit.EmitParam) []u8 {
+	mut out := []u8{}
+	if p.is_reg {
+		out << u8(0x50 + p.reg)
+		return out
+	}
+	out << u8(0x70 + p.breg)
+	put_sleb(mut out, i64(p.offset))
+	return out
 }
 
 // build_line emits a DWARF 4 .debug_line section for one compilation unit:
