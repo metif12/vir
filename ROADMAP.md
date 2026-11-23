@@ -1,5 +1,7 @@
 # Roadmap — vir v1 (mirrors tracking issue)
 
+v0.1.0 tagged 2026-11-23: all Part 2 milestones plus every post-v1 item below.
+
 ## Part 1 — vlang/v readiness (PRs from fork)
 - [ ] A1 IR surface: spec, version const, `ir_text.v`, round-trips
   (PR vlang/v#32555 open; findings fixed in 8124eec, re-review requested 2026-11-20)
