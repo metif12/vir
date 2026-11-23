@@ -12,8 +12,9 @@ import emit
 import obj
 import dwarf
 
-// compile_module optimizes `m`, lowers it for `triple`, and writes an ELF64
-// relocatable object to `path`. In v1 only amd64 targets can be emitted.
+// compile_module optimizes `m`, lowers it for `triple`, and writes a
+// relocatable object to `path`. Supported: amd64 (ELF/COFF/MachO) and
+// riscv64-linux-gnu (ELF).
 pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 	compile_module_lines(mut m, triple, path, map[int]int{})!
 }
@@ -24,8 +25,11 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 // and only the line program shell is emitted.
 pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines map[int]int) ! {
 	t := target.parse_triple(triple)!
-	if t.arch != .amd64 {
-		return error('vir: object emission supports amd64 only, got ${t.arch}')
+	if t.arch != .amd64 && t.arch != .riscv64 {
+		return error('vir: object emission supports amd64 and riscv64, got ${t.arch}')
+	}
+	if t.arch == .riscv64 && t.os != .linux {
+		return error('vir: riscv64 objects are linux-only in v1, got ${t.os}')
 	}
 
 	optimize.optimize(mut m)
@@ -33,12 +37,18 @@ pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines 
 
 	match t.os {
 		.linux {
-			write_elf(out, path)!
+			write_elf(out, t, path)!
 		}
 		.windows {
+			if t.arch != .amd64 {
+				return error('vir: COFF objects support amd64 only, got ${t.arch}')
+			}
 			write_coff(out, path)!
 		}
 		.macos {
+			if t.arch != .amd64 {
+				return error('vir: MachO objects support amd64 only, got ${t.arch}')
+			}
 			write_macho(out, path)!
 		}
 		else {
@@ -49,17 +59,27 @@ pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines 
 
 // lower_module optimizes `m` and lowers it for `triple`, returning the raw
 // emission for object writers and the JIT without touching the filesystem.
+// The arch selects the emitter: riscv64 uses the RV64I backend.
 pub fn lower_module(mut m ssa.Module, t target.Triple, lines map[int]int) !emit.EmitOutput {
 	optimize.optimize(mut m)
 	mut mm := mach.select_machine_lines(m, t, lines)!
 	mach.allocate(mut mm)!
 	mach.assert_no_vregs(mm)!
+	if t.arch == .riscv64 {
+		return emit.emit_riscv64(mm, t)!
+	}
 	return emit.emit_amd64(mm, t)!
 }
 
 // write_elf emits an ELF64 relocatable object.
-fn write_elf(out emit.EmitOutput, path string) ! {
-	mut elf := obj.ElfObject.new(obj.em_x86_64)
+fn write_elf(out emit.EmitOutput, t target.Triple, path string) ! {
+	machine := if t.arch == .riscv64 { obj.em_riscv } else { obj.em_x86_64 }
+	mut elf := obj.ElfObject.new(machine)
+	if t.arch == .riscv64 {
+		// Match the default cross toolchain (RVC + double-float ABI) so the
+		// linker accepts our integer-only objects next to its CRT.
+		elf.flags = u32(0x5)
+	}
 	elf.text_data = out.text
 	dwarf_secs := dwarf.build(out.syms, out.line_rows, 'vir 0.1.0', '.', 'vir-module')
 	elf.debug_info = dwarf_secs.info

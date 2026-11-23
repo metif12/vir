@@ -78,8 +78,11 @@ struct BranchPatch {
 
 // FuncCtx carries per-function layout state: the frame size in slots, the
 // absolute text offset of every block, and the pending branch patches.
+// `frame` is the byte size of the laid-out frame (riscv64 epilogues need it
+// at every ret site; the amd64 emitter ignores it).
 struct FuncCtx {
 	stack_slots int
+	frame       int
 mut:
 	block_offs map[int]int
 	patches    []BranchPatch

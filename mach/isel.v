@@ -4,7 +4,7 @@ import target
 import vssa.ssa
 
 // MachineSelector lowers verified, phi-free integer SSA to machine IR
-// for amd64 and arm64. Run the default optimizer pipeline first; phis,
+// for amd64, arm64 and riscv64. Run the default optimizer pipeline first;
 // floats, aggregates, and memory operations are rejected with clear
 // errors. The lowering shape is shared: only registers and the calling
 // convention change per target (selected via the triple).
@@ -28,15 +28,18 @@ pub fn select_machine(m &ssa.Module, t target.Triple) !MachineModule {
 // select_machine_lines lowers like select_machine and stamps each machine
 // instruction with its source line from the frontend's line table.
 pub fn select_machine_lines(m &ssa.Module, t target.Triple, lines map[int]int) !MachineModule {
-	if t.arch != .amd64 && t.arch != .arm64 {
-		return error('vir: machine selector supports amd64 and arm64, not ${t.arch}')
+	if t.arch != .amd64 && t.arch != .arm64 && t.arch != .riscv64 {
+		return error('vir: machine selector supports amd64, arm64 and riscv64, not ${t.arch}')
 	}
 	cc := target.callconv_for(t)!
 	ret_arch := t.arch
+	// Integer return register: index 0 (rax/x0) on amd64 and arm64,
+	// x10 (a0) on riscv64 where x0 is the hardwired zero.
+	ret_idx := if t.arch == .riscv64 { 10 } else { 0 }
 	mut sel := MachineSelector{
 		triple:  t
 		cc:      cc
-		ret_reg: target.PhysReg{ arch: ret_arch, index: 0 }
+		ret_reg: target.PhysReg{ arch: ret_arch, index: ret_idx }
 		sym:     map[int]Reg{}
 		lines:   lines
 	}

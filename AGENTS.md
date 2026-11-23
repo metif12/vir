@@ -30,6 +30,9 @@ V-native SSA compiler backend. Stock **V 0.5.2** on PATH is required.
   asm by design — don't "fix" the rejection, extend the format version instead.
 - `jit/` runs Windows/amd64 only and rejects external symbols by design;
   execution happens in-process, there is no object file to inspect.
+- riscv64 objects need ELF flags `0x5` (toolchain match) and **static** linking
+  for QEMU (`qemu-riscv64` has no dynamic loader); validate with
+  `v run tools/riscv_diff.v`, which compares against cross-gcc exit codes.
 - `tools/*.v` run via `v run tools/<name>.v`. `cminus_diff`, `fuzz_diff`,
   `vmini_diff` need WSL with gcc; `coff_diff` runs native Windows exes;
   MachO output is link-validated only (`lld -flavor darwin`), it cannot execute

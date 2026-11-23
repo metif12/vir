@@ -26,9 +26,9 @@ fn test_isel_golden_simple_add() {
 	t := target.parse_triple('amd64-linux-gnu')!
 	mm := select_machine(m, t)!
 	text := mach_to_text(mm)
-	expected := 'machine amd64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n'
-		+ '  %v1 = mov rdi\n' + '  %v2 = mov rsi\n' + '  %v0 = mov %v1\n'
-		+ '  %v0 = add %v0, %v2\n' + '  rax = mov %v0\n' + '  ret\n'
+	expected := 'machine amd64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n' +
+		'  %v1 = mov rdi\n' + '  %v2 = mov rsi\n' + '  %v0 = mov %v1\n' +
+		'  %v0 = add %v0, %v2\n' + '  rax = mov %v0\n' + '  ret\n'
 	assert text == expected
 }
 
@@ -46,9 +46,9 @@ fn test_isel_golden_simple_add_arm64() {
 	t := target.parse_triple('aarch64-linux-gnu')!
 	mm := select_machine(m, t)!
 	text := mach_to_text(mm)
-	expected := 'machine arm64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n'
-		+ '  %v1 = mov x0\n' + '  %v2 = mov x1\n' + '  %v0 = mov %v1\n'
-		+ '  %v0 = add %v0, %v2\n' + '  x0 = mov %v0\n' + '  ret\n'
+	expected := 'machine arm64-linux-gnu\n' + 'func \$add1 :\n' + '@b0 :\n' +
+		'  %v1 = mov x0\n' + '  %v2 = mov x1\n' + '  %v0 = mov %v1\n' +
+		'  %v0 = add %v0, %v2\n' + '  x0 = mov %v0\n' + '  ret\n'
 	assert text == expected
 }
 
@@ -87,12 +87,12 @@ fn test_isel_rejects_phi() {
 
 fn test_isel_rejects_wrong_arch() {
 	mut m := ssa.Module.new()
-	t := target.parse_triple('riscv64-linux-gnu') or {
+	t := target.parse_triple('mips-linux-gnu') or {
 		assert err.msg().contains('unsupported arch')
 		return
 	}
 	select_machine(m, t) or {
-		assert err.msg().contains('amd64')
+		assert err.msg().contains('mips')
 		return
 	}
 	assert false, 'expected arch rejection'

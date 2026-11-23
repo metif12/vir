@@ -1,10 +1,12 @@
 module target
 
-// Arch lists architectures used by vir. riscv64 is explicitly post-v1.
+// Arch lists architectures used by vir. riscv64 is post-v1 experimental:
+// ISel, the RV64I emitter and the ELF writer exist, QEMU-validated.
 pub enum Arch {
 	unknown
 	amd64
 	arm64
+	riscv64
 }
 
 // Os lists operating systems used by vir.
@@ -43,7 +45,8 @@ fn parse_arch(s string) !Arch {
 	return match s {
 		'amd64', 'x86_64' { Arch.amd64 }
 		'arm64', 'aarch64' { Arch.arm64 }
-		else { return error('vir: unsupported arch `${s}` (v1: amd64, arm64)') }
+		'riscv64', 'riscv' { Arch.riscv64 }
+		else { return error('vir: unsupported arch `${s}` (v1: amd64, arm64, riscv64)') }
 	}
 }
 
@@ -63,6 +66,7 @@ pub enum CallConvKind {
 	sysv_amd64
 	win64
 	aapcs64
+	riscv_lp64
 }
 
 // PhysReg is one physical register: an arch-specific index into the
@@ -77,8 +81,8 @@ pub:
 // name returns the assembler name of a physical register.
 pub fn (r PhysReg) name() string {
 	if r.arch == .amd64 && !r.is_float {
-		names := ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8',
-			'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+		names := ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11',
+			'r12', 'r13', 'r14', 'r15']
 		if r.index >= 0 && r.index < names.len {
 			return names[r.index]
 		}
@@ -96,6 +100,14 @@ pub fn (r PhysReg) name() string {
 	if r.arch == .arm64 && r.is_float {
 		if r.index >= 0 && r.index < 32 {
 			return 'v${r.index}'
+		}
+	}
+	if r.arch == .riscv64 && !r.is_float {
+		names := ['zero', 'ra', 'sp', 'gp', 'tp', 't0', 't1', 't2', 's0', 's1', 'a0', 'a1', 'a2',
+			'a3', 'a4', 'a5', 'a6', 'a7', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10',
+			's11', 't3', 't4', 't5', 't6']
+		if r.index >= 0 && r.index < names.len {
+			return names[r.index]
 		}
 	}
 	return 'badreg'
@@ -122,43 +134,43 @@ pub fn callconv_for(t Triple) !CallConv {
 		if t.abi == 'msvc' {
 			return CallConv{
 				kind:           .win64
-				int_arg_regs:   [PhysReg{arch: .amd64, index: 1}, PhysReg{
-					arch: .amd64,
+				int_arg_regs:   [PhysReg{ arch: .amd64, index: 1 }, PhysReg{
+					arch:  .amd64
 					index: 2
-				}, PhysReg{arch: .amd64, index: 8}, PhysReg{arch: .amd64, index: 9}]
-				float_arg_regs: [PhysReg{arch: .amd64, index: 0, is_float: true},
-					PhysReg{arch: .amd64, index: 1, is_float: true}, PhysReg{
-					arch: .amd64,
-					index: 2,
-					is_float: true
-				}, PhysReg{arch: .amd64, index: 3, is_float: true}]
-				int_ret_regs:   [PhysReg{arch: .amd64, index: 0}]
+				}, PhysReg{ arch: .amd64, index: 8 }, PhysReg{ arch: .amd64, index: 9 }]
+				float_arg_regs: [PhysReg{ arch: .amd64, index: 0, is_float: true },
+					PhysReg{ arch: .amd64, index: 1, is_float: true }, PhysReg{
+						arch:     .amd64
+						index:    2
+						is_float: true
+					}, PhysReg{ arch: .amd64, index: 3, is_float: true }]
+				int_ret_regs:   [PhysReg{ arch: .amd64, index: 0 }]
 				stack_align:    16
 				shadow_space:   32
 			}
 		}
 		return CallConv{
 			kind:           .sysv_amd64
-			int_arg_regs:   [PhysReg{arch: .amd64, index: 7}, PhysReg{
-				arch: .amd64,
+			int_arg_regs:   [PhysReg{ arch: .amd64, index: 7 }, PhysReg{
+				arch:  .amd64
 				index: 6
-			}, PhysReg{arch: .amd64, index: 2}, PhysReg{arch: .amd64, index: 1},
-				PhysReg{arch: .amd64, index: 8}, PhysReg{arch: .amd64, index: 9}]
-			float_arg_regs: [PhysReg{arch: .amd64, index: 0, is_float: true},
-				PhysReg{arch: .amd64, index: 1, is_float: true}, PhysReg{
-				arch: .amd64,
-				index: 2,
-				is_float: true
-			}, PhysReg{arch: .amd64, index: 3, is_float: true}, PhysReg{
-				arch: .amd64,
-				index: 4,
-				is_float: true
-			}, PhysReg{arch: .amd64, index: 5, is_float: true}, PhysReg{
-				arch: .amd64,
-				index: 6,
-				is_float: true
-			}, PhysReg{arch: .amd64, index: 7, is_float: true}]
-			int_ret_regs:   [PhysReg{arch: .amd64, index: 0}]
+			}, PhysReg{ arch: .amd64, index: 2 }, PhysReg{ arch: .amd64, index: 1 },
+				PhysReg{ arch: .amd64, index: 8 }, PhysReg{ arch: .amd64, index: 9 }]
+			float_arg_regs: [PhysReg{ arch: .amd64, index: 0, is_float: true },
+				PhysReg{ arch: .amd64, index: 1, is_float: true }, PhysReg{
+					arch:     .amd64
+					index:    2
+					is_float: true
+				}, PhysReg{ arch: .amd64, index: 3, is_float: true }, PhysReg{
+					arch:     .amd64
+					index:    4
+					is_float: true
+				}, PhysReg{ arch: .amd64, index: 5, is_float: true }, PhysReg{
+					arch:     .amd64
+					index:    6
+					is_float: true
+				}, PhysReg{ arch: .amd64, index: 7, is_float: true }]
+			int_ret_regs:   [PhysReg{ arch: .amd64, index: 0 }]
 			stack_align:    16
 			red_zone:       128
 		}
@@ -166,18 +178,32 @@ pub fn callconv_for(t Triple) !CallConv {
 	if t.arch == .arm64 {
 		mut int_regs := []PhysReg{}
 		for i in 0 .. 8 {
-			int_regs << PhysReg{arch: .arm64, index: i}
+			int_regs << PhysReg{ arch: .arm64, index: i }
 		}
 		mut float_regs := []PhysReg{}
 		for i in 0 .. 8 {
-			float_regs << PhysReg{arch: .arm64, index: i, is_float: true}
+			float_regs << PhysReg{ arch: .arm64, index: i, is_float: true }
 		}
 		return CallConv{
 			kind:           .aapcs64
 			int_arg_regs:   int_regs
 			float_arg_regs: float_regs
-			int_ret_regs:   [PhysReg{arch: .arm64, index: 0}]
+			int_ret_regs:   [PhysReg{ arch: .arm64, index: 0 }]
 			stack_align:    16
+		}
+	}
+	if t.arch == .riscv64 {
+		// LP64D integer convention: a0-a7 (x10-x17), return in a0. vir v1
+		// lowers integers only.
+		mut int_regs := []PhysReg{}
+		for i in 10 .. 18 {
+			int_regs << PhysReg{ arch: .riscv64, index: i }
+		}
+		return CallConv{
+			kind:         .riscv_lp64
+			int_arg_regs: int_regs
+			int_ret_regs: [PhysReg{ arch: .riscv64, index: 10 }]
+			stack_align:  16
 		}
 	}
 	return error('vir: no calling convention for ${t.arch}')

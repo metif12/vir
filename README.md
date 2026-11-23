@@ -19,7 +19,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
   pass manager, verifiers)
 - `target/` — triple/ABI model
 - `mach/` — machine IR, ISel, linear-scan regalloc
-- `emit/` — amd64 emitter
+- `emit/` — amd64 and RV64I emitters (+ `riscv64_test.v` encoding goldens)
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
 - `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs + line table)
 - `bitcode/` — binary IR v1 encoder/decoder for the SSA core
@@ -54,7 +54,7 @@ Tracked in the same central issue; implemented as PRs from the V fork.
 
 ## Build
 Requires a stock V compiler on PATH. `virc compile <in.vir> <out.o> [triple]`
-emits an ELF64 object for `amd64-linux-gnu`, a COFF object for
+emits an ELF64 object for `amd64-linux-gnu` or `riscv64-linux-gnu`, a COFF object for
 `amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
 two link and run with gcc; the MachO object links with `lld -flavor darwin`
 but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit,
@@ -72,7 +72,9 @@ See `libvir/README.md` to build the C shared library, and run
 `v run tools/cminus_diff.v` to compare vir-compiled fixtures against gcc
 (requires WSL with gcc); `v run tools/coff_diff.v` does the same with native
 Windows executables; `v run tools/vmini_diff.v` compares V-subset programs
-against the stock V compiler. `v run tools/fuzz_diff.v [n] [seed]` fuzzes
+against the stock V compiler. `v run tools/riscv_diff.v` compares riscv64
+fixtures against the cross gcc under `qemu-riscv64` (requires the cross
+toolchain in WSL). `v run tools/fuzz_diff.v [n] [seed]` fuzzes
 random programs through the Linux differential, and `v run tools/bench.v`
 reports compile times and object sizes. `v run tools/vir_opt_determinism.v`
 proves `virc opt` is byte-identical across repeated runs.

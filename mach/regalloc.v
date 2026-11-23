@@ -19,7 +19,7 @@ struct Active {
 }
 
 // reg_pool returns the allocatable caller-saved registers for a target.
-// The return register (rax/x0) stays out of the pool so fixed
+// The return register (rax/x0/a0) stays out of the pool so fixed
 // call/return sequences can never collide with allocated values.
 fn reg_pool(t target.Triple) ![]target.PhysReg {
 	if t.arch == .amd64 {
@@ -38,6 +38,16 @@ fn reg_pool(t target.Triple) ![]target.PhysReg {
 		mut out := []target.PhysReg{}
 		for i in 1 .. 16 {
 			out << target.PhysReg{ arch: .arm64, index: i }
+		}
+		return out
+	}
+	if t.arch == .riscv64 {
+		// Caller-saved t0-t6 (x5-x7, x28-x31) plus a2-a7 (x12-x17). a0/a1
+		// are the fusion temporaries and stay out of the pool; values live
+		// across calls are spilled to slots by the interval logic.
+		mut out := []target.PhysReg{}
+		for i in [5, 6, 7, 28, 29, 30, 31, 12, 13, 14, 15, 16, 17] {
+			out << target.PhysReg{ arch: .riscv64, index: i }
 		}
 		return out
 	}

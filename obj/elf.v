@@ -21,6 +21,10 @@ const et_rel = 1 // Relocatable file
 // em_x86_64 is the ELF e_machine value for x86-64.
 pub const em_x86_64 = u16(62)
 
+// em_riscv is the ELF e_machine value for RISC-V (64-bit objects use
+// ELFCLASS64 with the same value).
+pub const em_riscv = u16(243)
+
 const sht_progbits = 1
 const sht_symtab = 2
 const sht_strtab = 3
@@ -34,6 +38,7 @@ const shf_execinstr = 0x4
 pub struct ElfObject {
 	machine u16
 pub mut:
+	flags        u32
 	text_data    []u8
 	data_data    []u8
 	rodata_data  []u8
@@ -288,7 +293,7 @@ pub fn (mut e ElfObject) write(path string) ! {
 	write_u64_le(mut buf, 0) // Entry
 	write_u64_le(mut buf, 0) // Phdr off
 	write_u64_le(mut buf, u64(off_shdrs))
-	write_u32_le(mut buf, 0) // Flags
+	write_u32_le(mut buf, u32(e.flags)) // Flags (riscv64: float ABI + RVC)
 	write_u16_le(mut buf, u16(ehdr_size))
 	write_u16_le(mut buf, 0) // Phdr entry size
 	write_u16_le(mut buf, 0) // Phdr num
