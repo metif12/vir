@@ -78,7 +78,8 @@ See `libvir/README.md` to build the C shared library, and run
 Windows executables; `v run tools/vmini_diff.v` compares V-subset programs
 against the stock V compiler. `v run tools/riscv_diff.v` compares riscv64
 fixtures against the cross gcc under `qemu-riscv64` (requires the cross
-toolchain in WSL). `v run tools/fuzz_diff.v [n] [seed]` fuzzes
+toolchain in WSL), using the in-process JIT as oracle for the V-subset
+fixtures. `v run tools/fuzz_diff.v [n] [seed]` fuzzes
 random programs through the Linux differential, and `v run tools/bench.v`
 reports compile times and object sizes. `v run tools/vir_opt_determinism.v`
 proves `virc opt` is byte-identical across repeated runs.
