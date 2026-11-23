@@ -33,6 +33,9 @@ V-native SSA compiler backend. Stock **V 0.5.2** on PATH is required.
 - riscv64 objects need ELF flags `0x5` (toolchain match) and **static** linking
   for QEMU (`qemu-riscv64` has no dynamic loader); validate with
   `v run tools/riscv_diff.v`, which compares against cross-gcc exit codes.
+- DWARF `.debug_loc` entries use a **2-byte** length (DWARF 2/3/4); only
+  `.debug_loclists` and `DW_FORM_exprloc` use ULEB128. Both llvm-dwarfdump
+  and readelf reject ULEB128 lengths here.
 - `tools/*.v` run via `v run tools/<name>.v`. `cminus_diff`, `fuzz_diff`,
   `vmini_diff` need WSL with gcc; `coff_diff` runs native Windows exes;
   MachO output is link-validated only (`lld -flavor darwin`), it cannot execute

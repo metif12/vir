@@ -7,7 +7,7 @@ fn test_dwarf_info_header_and_payload() {
 		emit.EmitSym{ name: 'add', is_func: true, offset: 0, size: 12 },
 		emit.EmitSym{ name: 'main', is_func: true, offset: 12, size: 20 },
 	]
-	secs := build(syms, []emit.LineRow{}, 'vir 0.1.0', '.', 'vir-module')
+	secs := build(syms, []emit.LineRow{}, []DebugVar{}, 'vir 0.1.0', '.', 'vir-module')
 	assert secs.info.len > 11
 	assert secs.abbrev.len > 3
 
@@ -39,7 +39,7 @@ fn test_dwarf_line_program_header() {
 		emit.LineRow{ offset: 0, line: 3 },
 		emit.LineRow{ offset: 2, line: 4 },
 	]
-	secs := build(syms, rows, 'vir', '.', 'm.c')
+	secs := build(syms, rows, []DebugVar{}, 'vir', '.', 'm.c')
 	assert secs.line.len > 12
 	unit_len := u32(secs.line[0]) | (u32(secs.line[1]) << 8) | (u32(secs.line[2]) << 16) | (u32(secs.line[3]) << 24)
 	assert int(unit_len) == secs.line.len - 4
@@ -66,7 +66,7 @@ fn test_dwarf_empty_rows_yield_shell_program() {
 	syms := [
 		emit.EmitSym{ name: 'main', is_func: true, offset: 0, size: 4 },
 	]
-	secs := build(syms, []emit.LineRow{}, 'vir', '.', 'm')
+	secs := build(syms, []emit.LineRow{}, []DebugVar{}, 'vir', '.', 'm')
 	assert secs.line.len > 12
 	unit_len := u32(secs.line[0]) | (u32(secs.line[1]) << 8) | (u32(secs.line[2]) << 16) | (u32(secs.line[3]) << 24)
 	assert int(unit_len) == secs.line.len - 4
@@ -77,7 +77,7 @@ fn test_dwarf_skips_undefined_symbols() {
 		emit.EmitSym{ name: 'puts', is_func: true, is_undefined: true },
 		emit.EmitSym{ name: 'main', is_func: true, offset: 0, size: 4 },
 	]
-	secs := build(syms, []emit.LineRow{}, 'vir', '.', 'm')
+	secs := build(syms, []emit.LineRow{}, []DebugVar{}, 'vir', '.', 'm')
 	assert secs.info.bytestr().contains('main')
 	assert !secs.info.bytestr().contains('puts')
 }
@@ -114,7 +114,7 @@ fn test_dwarf_variable_entries() {
 			]
 		},
 	]
-	secs := build(syms, []emit.LineRow{}, 'vir', '.', 'm')
+	secs := build(syms, []emit.LineRow{}, []DebugVar{}, 'vir', '.', 'm')
 	// Variable DIE for `a`: abbrev 3, name, exprloc length 1, DW_OP_reg7.
 	assert find_bytes(secs.info, [u8(3), `a`, 0, 1, 0x57]) >= 0
 	// Variable DIE for `b`: DW_OP_breg6(0x76) plus SLEB128(24).
@@ -122,4 +122,30 @@ fn test_dwarf_variable_entries() {
 	// Subprogram children are terminated, then the CU children.
 	last := secs.info[secs.info.len - 2..]
 	assert last == [u8(0), u8(0)]
+}
+
+fn test_dwarf_location_lists() {
+	syms := [
+		emit.EmitSym{ name: 'main', is_func: true, offset: 0, size: 20 },
+	]
+	vars := [
+		DebugVar{
+			func:   'main'
+			name:   'i'
+			ranges: [
+				VarRange{ start: 4, end: 12, is_reg: true, reg: 5 },
+				VarRange{ start: 12, end: 18, breg: 8, off: -24 },
+			]
+		},
+	]
+	secs := build(syms, []emit.LineRow{}, vars, 'vir', '.', 'm')
+	// Variable DIE references the location list: abbrev 4, name, sec_offset 0.
+	assert find_bytes(secs.info, [u8(4), `i`, 0, 0, 0, 0, 0]) >= 0
+	// First list entry: begin 4, end 12, u16 length 1, DW_OP_reg5.
+	assert find_bytes(secs.loc, [u8(4), 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0x55]) >= 0
+	// Second entry uses DW_OP_breg8 plus SLEB128(-24), with a u16 length 2.
+	assert find_bytes(secs.loc, [u8(2), 0, 0x78, 0x68]) >= 0
+	// The section ends with an end-of-list terminator.
+	last := secs.loc[secs.loc.len - 16..]
+	assert last == [u8(0), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 }

@@ -78,3 +78,22 @@ fn test_codegen_line_table_covers_all_instructions() {
 		assert line <= max_line
 	}
 }
+
+fn test_codegen_debug_vars_name_tracked_values() {
+	funcs := parse(fixture('while.c')!)!
+	m, dbg := generate_with_debug(funcs)!
+	assert dbg.lines.len == m.instrs.len
+	// while.c assigns sum and i from computed (non-constant) values.
+	mut seen := map[string]bool{}
+	for _, names in dbg.vars {
+		for name in names {
+			seen[name] = true
+		}
+	}
+	assert seen['sum']
+	assert seen['i']
+	// Every tracked value is a real instruction, never a shared constant.
+	for vid in dbg.vars.keys() {
+		assert m.values[vid].kind == .instruction
+	}
+}

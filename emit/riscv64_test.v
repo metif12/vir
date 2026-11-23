@@ -65,8 +65,8 @@ fn test_riscv_object_is_riscv_elf() {
 	// e_machine at offset 18 is EM_RISCV (243).
 	machine := u16(buf[18]) | (u16(buf[19]) << 8)
 	assert machine == 243
-	// Twelve sections: nine base plus three DWARF ones.
-	assert u16(buf[60]) | (u16(buf[61]) << 8) == 12
+	// Thirteen sections: nine base plus four DWARF ones.
+	assert u16(buf[60]) | (u16(buf[61]) << 8) == 13
 }
 
 fn r32(b []u8, off int) u32 {

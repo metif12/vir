@@ -12,6 +12,17 @@ import emit
 import obj
 import dwarf
 
+// FrontDebug carries frontend source information that the text and binary IR
+// formats cannot represent: a line table (SSA instruction value id to source
+// line) and a variable table (SSA instruction value id to the source-level
+// variable names whose value it holds). Optimizer-created values and
+// constants have no entries; consumers must tolerate missing keys.
+pub struct FrontDebug {
+pub mut:
+	lines map[int]int
+	vars  map[int][]string
+}
+
 // compile_module optimizes `m`, lowers it for `triple`, and writes a
 // relocatable object to `path`. Supported: amd64 (ELF/COFF/MachO) and
 // riscv64-linux-gnu (ELF).
@@ -24,6 +35,27 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 // line). Modules parsed from `.vir` text carry no lines; pass an empty map
 // and only the line program shell is emitted.
 pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines map[int]int) ! {
+	t := target_for(triple)!
+	optimize.optimize(mut m)
+	out := lower_module(mut m, t, lines)!
+	write_object(out, t, []dwarf.DebugVar{}, path)!
+}
+
+// compile_module_debug lowers like compile_module_lines and additionally
+// emits DWARF location lists for the frontend's tracked variables. Only the
+// in-memory frontend path carries variable names; file-parsed modules get
+// no location lists.
+pub fn compile_module_debug(mut m ssa.Module, triple string, path string, dbg FrontDebug) ! {
+	t := target_for(triple)!
+	optimize.optimize(mut m)
+	out := lower_module(mut m, t, dbg.lines)!
+	vars := build_var_locs(m, dbg, out)!
+	write_object(out, t, vars, path)!
+}
+
+// target_for parses a triple and enforces the v1 object-emission support:
+// amd64 everywhere, riscv64 linux only.
+fn target_for(triple string) !target.Triple {
 	t := target.parse_triple(triple)!
 	if t.arch != .amd64 && t.arch != .riscv64 {
 		return error('vir: object emission supports amd64 and riscv64, got ${t.arch}')
@@ -31,13 +63,14 @@ pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines 
 	if t.arch == .riscv64 && t.os != .linux {
 		return error('vir: riscv64 objects are linux-only in v1, got ${t.os}')
 	}
+	return t
+}
 
-	optimize.optimize(mut m)
-	out := lower_module(mut m, t, lines)!
-
+// write_object dispatches the lowered module to the OS object writer.
+fn write_object(out emit.EmitOutput, t target.Triple, vars []dwarf.DebugVar, path string) ! {
 	match t.os {
 		.linux {
-			write_elf(out, t, path)!
+			write_elf(out, t, vars, path)!
 		}
 		.windows {
 			if t.arch != .amd64 {
@@ -71,8 +104,118 @@ pub fn lower_module(mut m ssa.Module, t target.Triple, lines map[int]int) !emit.
 	return emit.emit_amd64(mm, t)!
 }
 
+// build_var_locs groups address rows by source variable into DWARF location
+// lists. Each tracked SSA value contributes one range from the start of its
+// defining instruction to the end of its last user, at the home recorded on
+// its last defining row. Constants, arguments (covered by entry DIEs) and
+// values without rows or homes are skipped.
+fn build_var_locs(m &ssa.Module, dbg FrontDebug, out emit.EmitOutput) ![]dwarf.DebugVar {
+	// Span per SSA instruction index.
+	mut span_start := map[int]u64{}
+	mut span_end := map[int]u64{}
+	for r in out.addr_rows {
+		if r.ssa_id <= 0 || r.ssa_id >= m.values.len {
+			continue
+		}
+		idx := int(m.values[r.ssa_id].index)
+		if idx < 0 {
+			continue
+		}
+		start := u64(r.offset)
+		end := start + u64(r.size)
+		if idx !in span_start || start < span_start[idx] {
+			span_start[idx] = start
+		}
+		if idx !in span_end || end > span_end[idx] {
+			span_end[idx] = end
+		}
+	}
+	// Home per SSA value: the location on its last defining row.
+	mut home := map[int]emit.AddrRow{}
+	for r in out.addr_rows {
+		if r.ssa_id <= 0 || r.ssa_id >= m.values.len || !r.has_loc {
+			continue
+		}
+		home[r.ssa_id] = r
+	}
+	mut by_name := map[string][]dwarf.VarRange{}
+	mut var_func := map[string]string{}
+	for vid, names in dbg.vars {
+		if vid <= 0 || vid >= m.values.len {
+			continue
+		}
+		v := m.values[vid]
+		if v.kind != .instruction {
+			continue
+		}
+		def_idx := int(v.index)
+		if def_idx < 0 || def_idx >= m.instrs.len || def_idx !in span_start {
+			continue
+		}
+		h := home[vid] or { continue }
+		if h.is_reg && (h.reg < 0 || h.reg > 31) {
+			continue
+		}
+		if !h.is_reg && (h.breg < 0 || h.breg > 31) {
+			continue
+		}
+		start := span_start[def_idx]
+		mut end := span_end[def_idx]
+		for u in v.uses {
+			uid := int(u)
+			if uid <= 0 || uid >= m.values.len {
+				continue
+			}
+			uv := m.values[uid]
+			if uv.kind != .instruction {
+				continue
+			}
+			uidx := int(uv.index)
+			if uidx in span_end && span_end[uidx] > end {
+				end = span_end[uidx]
+			}
+		}
+		if end <= start {
+			continue
+		}
+		// Owning function via defining instruction -> block -> parent.
+		def_instr := m.instrs[int(v.index)]
+		blk := int(def_instr.block)
+		mut func_name := ''
+		if blk >= 0 && blk < m.blocks.len {
+			fidx := m.blocks[blk].parent
+			if fidx >= 0 && fidx < m.funcs.len {
+				func_name = m.funcs[fidx].name
+			}
+		}
+		loc := dwarf.VarRange{
+			start:  start
+			end:    end
+			is_reg: h.is_reg
+			reg:    h.reg
+			breg:   h.breg
+			off:    h.off
+		}
+		for name in names {
+			by_name[name] << loc
+			var_func[name] = func_name
+		}
+	}
+	// Deterministic order: sort variables by name, ranges by start address,
+	// so repeated builds stay byte-identical.
+	mut names := by_name.keys()
+	names.sort()
+	mut out_vars := []dwarf.DebugVar{}
+	for name in names {
+		mut ranges := by_name[name].clone()
+		ranges.sort(a.start < b.start)
+		out_vars << dwarf.DebugVar{ func: var_func[name], name: name, ranges: ranges }
+	}
+	return out_vars
+}
+
 // write_elf emits an ELF64 relocatable object.
-fn write_elf(out emit.EmitOutput, t target.Triple, path string) ! {
+fn write_elf(out emit.EmitOutput, t target.Triple, vars []dwarf.DebugVar, path string) ! {
 	machine := if t.arch == .riscv64 { obj.em_riscv } else { obj.em_x86_64 }
 	mut elf := obj.ElfObject.new(machine)
 	if t.arch == .riscv64 {
@@ -81,10 +224,12 @@ fn write_elf(out emit.EmitOutput, t target.Triple, path string) ! {
 		elf.flags = u32(0x5)
 	}
 	elf.text_data = out.text
-	dwarf_secs := dwarf.build(out.syms, out.line_rows, 'vir 0.1.0', '.', 'vir-module')
+	dwarf_secs := dwarf.build(out.syms, out.line_rows, vars, 'vir 0.1.0', '.', 'vir-module')
 	elf.debug_info = dwarf_secs.info
 	elf.debug_abbrev = dwarf_secs.abbrev
 	elf.debug_line = dwarf_secs.line
+	elf.debug_loc = dwarf_secs.loc
+	elf.debug_loc = dwarf_secs.loc
 	// ELF reserves symbol index 0 for the null symbol, so emitter indices
 	// shift by one on their way into the object's symbol table.
 	mut elf_idx := []int{len: out.syms.len}

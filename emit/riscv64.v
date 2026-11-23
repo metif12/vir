@@ -32,6 +32,7 @@ mut:
 	sym_idx   map[string]int
 	relocs    []EmitReloc
 	line_rows []LineRow
+	addr_rows []AddrRow
 }
 
 // emit_riscv64 encodes a register-allocated machine module into RV64I text
@@ -53,6 +54,7 @@ pub fn emit_riscv64(m &mach.MachineModule, t target.Triple) !EmitOutput {
 		syms:      e.syms
 		relocs:    e.relocs
 		line_rows: e.line_rows
+		addr_rows: e.addr_rows
 	}
 }
 
@@ -100,6 +102,7 @@ fn (mut e RiscvEmitter) emit_func(f mach.MachineFunc) ! {
 					return error('vir: riscv64 cmp without a consumer')
 				}
 				next := b.instrs[n + 1]
+				start := e.text.len
 				if next.op == .setcc {
 					e.emit_fused_setcc(ins, next, mut ctx)!
 				} else if next.op == .jcc {
@@ -107,13 +110,17 @@ fn (mut e RiscvEmitter) emit_func(f mach.MachineFunc) ! {
 				} else {
 					return error('vir: riscv64 cmp must feed setcc or jcc, got ${next.op}')
 				}
+				// One row spans the fusion; the consumer carries the home.
+				e.addr_mark_fused(start, next, ctx)!
 				n += 2
 				continue
 			}
 			if ins.op == .setcc {
 				return error('vir: riscv64 setcc without a preceding cmp')
 			}
+			start := e.text.len
 			e.emit_instr(ins, mut ctx)!
+			e.addr_mark(start, ins, ctx)!
 			n++
 		}
 	}
@@ -408,6 +415,48 @@ fn (mut e RiscvEmitter) operand_in_reg(o mach.Operand, tmp int, mut ctx FuncCtx)
 			return error('vir: riscv64 cannot materialize ${o.kind} inline')
 		}
 	}
+}
+
+// addr_mark records one machine instruction's address range, SSA origin and
+// defining home for DWARF location lists. Instructions without an SSA origin
+// (entry moves, materialized constants) are skipped: constants and
+// parameters never enter location lists.
+fn (mut e RiscvEmitter) addr_mark(start int, ins mach.MachineInstr, ctx FuncCtx) ! {
+	e.addr_mark_as(start, ins, ins, ctx)!
+}
+
+// addr_mark_fused records one row spanning a fused cmp+consumer pair,
+// attributed to the consumer that carries the home (or just the range for
+// branches). Both share one SSA origin.
+fn (mut e RiscvEmitter) addr_mark_fused(start int, consumer mach.MachineInstr, ctx FuncCtx) ! {
+	e.addr_mark_as(start, consumer, consumer, ctx)!
+}
+
+fn (mut e RiscvEmitter) addr_mark_as(start int, origin mach.MachineInstr, home mach.MachineInstr, ctx FuncCtx) ! {
+	if origin.ssa_id == 0 {
+		return
+	}
+	mut row := AddrRow{
+		offset: u32(start)
+		size:   u32(e.text.len - start)
+		ssa_id: origin.ssa_id
+	}
+	if home.has_dst {
+		if home.dst.kind == .reg {
+			if !home.dst.reg.is_phys() {
+				return error('vir: riscv64 address row in virtual register')
+			}
+			row.has_loc = true
+			row.is_reg = true
+			row.reg = home.dst.reg.phys.index
+		} else if home.dst.kind == .mem || home.dst.kind == .slot {
+			base, disp := e.resolve_mem(home.dst, ctx)!
+			row.has_loc = true
+			row.breg = base
+			row.off = disp
+		}
+	}
+	e.addr_rows << row
 }
 
 // cond_branch maps a condition to its RISC-V branch funct3 and whether the

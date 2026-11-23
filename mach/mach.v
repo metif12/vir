@@ -147,6 +147,10 @@ pub mut:
 	// line is the 1-based source line for the DWARF line table, 0 when
 	// unknown (implicit code, optimizer-synthesized instructions).
 	line int
+	// ssa_id is the SSA instruction value this machine instruction was
+	// lowered from, 0 when none (entry moves, constants). It drives the
+	// DWARF location-list address ranges.
+	ssa_id int
 }
 
 // MachineBlock is one machine basic block.

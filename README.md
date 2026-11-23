@@ -58,12 +58,14 @@ emits an ELF64 object for `amd64-linux-gnu` or `riscv64-linux-gnu`, a COFF objec
 `amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
 two link and run with gcc; the MachO object links with `lld -flavor darwin`
 but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit,
-subprogram, line-table and parameter-variable info, verifiable with
-`llvm-dwarfdump`. Line rows exist only for modules compiled from a frontend
-AST in memory (`generate_with_lines` + `compile_module_lines`): `.vir` text
-and bitcode v1 carry no source lines, so file-path objects get a valid but
-empty line program. Variable entries describe parameters at their entry
-locations; location lists for moved values are future work.
+subprogram, line-table, parameter-variable and location-list info, verifiable
+with `llvm-dwarfdump` and `readelf --debug-dump`. Line rows exist only for
+modules compiled from a frontend AST in memory (`generate_with_lines` +
+`compile_module_lines`): `.vir` text and bitcode v1 carry no source lines, so
+file-path objects get a valid but empty line program. Variable entries
+describe parameters at their entry locations and tracked locals with address
+ranges (`compile_module_debug` + `generate_with_debug`); constants and
+optimizer-created values have no entries.
 `virc cminus <in.c> [out.vir]` runs the C-minus frontend; `virc vmini <in.v>
 [out.vir]` runs the V-subset frontend. `virc bitcode encode <in.vir> <out.vbc>`
 and `virc bitcode decode <in.vbc> [out.vir]` convert between text IR and the

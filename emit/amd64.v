@@ -47,6 +47,23 @@ pub mut:
 	offset i32
 }
 
+// AddrRow maps one machine instruction to its address range and SSA origin:
+// the text offset and byte size of the encoding, the SSA instruction value
+// it was lowered from (0 for entry moves and constants), and the value's
+// final home when the instruction defines it. The pipeline turns these
+// into DWARF location-list ranges.
+pub struct AddrRow {
+pub mut:
+	offset  u32
+	size    u32
+	ssa_id  int
+	has_loc bool
+	is_reg  bool
+	reg     int
+	breg    int
+	off     i32
+}
+
 // LineRow maps one text-section offset to its 1-based source line: the
 // address side of a DWARF line-table row. Rows are section-relative, like
 // EmitSym offsets, so the object writer needs no relocation for them.
@@ -66,6 +83,7 @@ pub mut:
 	syms      []EmitSym
 	relocs    []EmitReloc
 	line_rows []LineRow
+	addr_rows []AddrRow
 }
 
 // fp_vreg mirrors mach's private frame-pointer placeholder. It is only valid
@@ -80,6 +98,7 @@ mut:
 	sym_idx   map[string]int
 	relocs    []EmitReloc
 	line_rows []LineRow
+	addr_rows []AddrRow
 	shadow    int
 }
 
@@ -123,6 +142,7 @@ pub fn emit_amd64(m &mach.MachineModule, t target.Triple) !EmitOutput {
 		syms:      e.syms
 		relocs:    e.relocs
 		line_rows: e.line_rows
+		addr_rows: e.addr_rows
 	}
 }
 
@@ -172,7 +192,9 @@ fn (mut e Emitter) emit_func(f mach.MachineFunc) ! {
 					e.line_rows << LineRow{ offset: u32(e.text.len), line: ins.line }
 				}
 			}
+			start := e.text.len
 			e.emit_instr(ins, mut ctx)!
+			e.addr_mark(start, ins, ctx)!
 		}
 	}
 	// Second pass: every block offset is known, so patch all rel32 fields.
@@ -873,6 +895,37 @@ fn (e &Emitter) debug_params(f mach.MachineFunc, ctx FuncCtx) ![]EmitParam {
 		}
 	}
 	return out
+}
+
+// addr_mark records one machine instruction's address range, SSA origin and
+// defining home for DWARF location lists. Instructions without an SSA origin
+// (entry moves, materialized constants) are skipped: constants and
+// parameters never enter location lists.
+fn (mut e Emitter) addr_mark(start int, ins mach.MachineInstr, ctx FuncCtx) ! {
+	if ins.ssa_id == 0 {
+		return
+	}
+	mut row := AddrRow{
+		offset: u32(start)
+		size:   u32(e.text.len - start)
+		ssa_id: ins.ssa_id
+	}
+	if ins.has_dst {
+		if ins.dst.kind == .reg {
+			if !ins.dst.reg.is_phys() {
+				return error('vir: amd64 address row in virtual register')
+			}
+			row.has_loc = true
+			row.is_reg = true
+			row.reg = amd64_dwarf_reg(ins.dst.reg.phys.index)!
+		} else if ins.dst.kind == .mem || ins.dst.kind == .slot {
+			base_hw, disp := e.mem_addr(ins.dst, ctx)!
+			row.has_loc = true
+			row.breg = amd64_dwarf_reg(base_hw)!
+			row.off = i32(disp)
+		}
+	}
+	e.addr_rows << row
 }
 
 fn cc_byte(c mach.Cond) u8 {

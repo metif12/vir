@@ -25,9 +25,10 @@
   (C-minus vs gcc and V subset vs the stock V compiler both differential-tested)
 - [x] M7 fuzz + differential + benchmarks
 
-Post-v1 remaining: DWARF location lists for moved values.
+Post-v1 remaining: nothing. vir v1 is complete.
 - [x] JIT: in-process execution on Windows/amd64 (internal calls, no externals)
 - [x] riscv64: RV64I emitter + ELF objects, QEMU-validated (`v run tools/riscv_diff.v`)
-- [x] DWARF: compile-unit/subprogram DIEs, line tables and parameter variables
-  in ELF objects (in-memory frontend path; `.vir`/bitcode carry no lines)
+- [x] DWARF: compile-unit/subprogram DIEs, line tables, parameter variables and
+  location lists in ELF objects (in-memory frontend path; `.vir`/bitcode carry
+  no lines and no variable names)
 - [x] binary bitcode: v1 SSA-core encode/decode, byte-identical round-trip

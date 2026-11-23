@@ -44,6 +44,29 @@ pub:
 	info   []u8
 	abbrev []u8
 	line   []u8
+	loc    []u8
+}
+
+// VarRange is one DWARF location-list entry: the variable holds the
+// described location for [start, end) section-relative addresses.
+pub struct VarRange {
+pub:
+	start  u64
+	end    u64
+	is_reg bool
+	reg    int
+	breg   int
+	off    i32
+}
+
+// DebugVar is one source variable with its location-list ranges, grouped
+// from the pipeline's address rows. func names the owning function so the
+// DIE lands under the right subprogram.
+pub struct DebugVar {
+pub:
+	func   string
+	name   string
+	ranges []VarRange
 }
 
 fn put_u16(mut b []u8, v u16) {
@@ -102,7 +125,7 @@ fn put_sleb(mut b []u8, v i64) {
 	}
 }
 
-pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir string, cu_name string) DwarfSections {
+pub fn build(syms []emit.EmitSym, rows []emit.LineRow, vars []DebugVar, producer string, comp_dir string, cu_name string) DwarfSections {
 	mut ab := []u8{}
 	// Abbrev 1: DW_TAG_compile_unit, has children.
 	ab << u8(1)
@@ -128,14 +151,22 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 	put_pair(mut ab, at_external, form_flag_present)
 	ab << u8(0)
 	ab << u8(0)
-	// Abbrev 3: DW_TAG_variable, no children. The location is an entry
-	// location (function parameters live there on entry); location lists
-	// for values that move are post-v1 work.
+	// Abbrev 3: DW_TAG_variable, no children, entry location expression.
+	// Used for parameters whose home is known at function entry.
 	ab << u8(3)
 	ab << u8(tag_variable)
 	ab << u8(0)
 	put_pair(mut ab, at_name, form_string)
 	put_pair(mut ab, at_location, form_exprloc)
+	ab << u8(0)
+	ab << u8(0)
+	// Abbrev 4: DW_TAG_variable, no children, location list. Used for
+	// tracked locals with computed address ranges.
+	ab << u8(4)
+	ab << u8(tag_variable)
+	ab << u8(0)
+	put_pair(mut ab, at_name, form_string)
+	put_pair(mut ab, at_location, form_sec_offset)
 	ab << u8(0)
 	ab << u8(0)
 	ab << u8(0) // end of abbreviation table
@@ -166,6 +197,10 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 	// vir emits a single CU, so it is always zero.
 	put_u32(mut die, 0)
 
+	line := build_line(rows, comp_dir, cu_name)
+	loc, loc_offs := build_loc(vars)
+
+	// The unit DIEs below reference the line program and location lists.
 	for s in syms {
 		if !s.is_func || s.is_undefined {
 			continue
@@ -186,11 +221,24 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 			put_uleb(mut die, u64(expr.len))
 			die << expr
 		}
+		// Tracked locals live under their owning subprogram as location
+		// lists; variables with no encodable ranges were left out of the
+		// section and are skipped here too.
+		for vi, v in vars {
+			if v.func != s.name || v.ranges.len == 0 {
+				continue
+			}
+			if loc_offs[vi] == ~u32(0) {
+				continue
+			}
+			die << u8(4)
+			die << v.name.bytes()
+			die << u8(0)
+			put_u32(mut die, loc_offs[vi])
+		}
 		die << u8(0) // end of subprogram children
 	}
 	die << u8(0) // end of compile-unit children
-
-	line := build_line(rows, comp_dir, cu_name)
 
 	mut info := []u8{}
 	// unit_length excludes this 4-byte field itself.
@@ -200,20 +248,69 @@ pub fn build(syms []emit.EmitSym, rows []emit.LineRow, producer string, comp_dir
 	info << u8(8) // address size
 	info << die
 
-	return DwarfSections{ info: info, abbrev: ab, line: line }
+	return DwarfSections{ info: info, abbrev: ab, line: line, loc: loc }
 }
 
-// param_expr encodes one parameter's entry location as a DWARF expression:
-// DW_OP_regN for registers, DW_OP_bregN plus a signed offset otherwise.
-fn param_expr(p emit.EmitParam) []u8 {
+// build_loc emits a DWARF 4 .debug_loc section for the given variables and
+// returns the section plus each variable's list offset in input order.
+// A variable with no valid ranges gets no bytes and offset ~u32(0); callers
+// skip those.
+fn build_loc(vars []DebugVar) ([]u8, []u32) {
 	mut out := []u8{}
-	if p.is_reg {
-		out << u8(0x50 + p.reg)
+	mut offs := []u32{}
+	for v in vars {
+		mut entries := []u8{}
+		for r in v.ranges {
+			if r.end <= r.start {
+				continue
+			}
+			expr := loc_expr(r.is_reg, r.reg, r.breg, r.off)
+			if expr.len == 0 {
+				continue
+			}
+			put_u64(mut entries, r.start)
+			put_u64(mut entries, r.end)
+			// DWARF 2/3/4 .debug_loc uses a 2-byte entry length (unlike
+			// .debug_loclists and DW_FORM_exprloc, which use ULEB128).
+			put_u16(mut entries, u16(expr.len))
+			entries << expr
+		}
+		if entries.len == 0 {
+			offs << ~u32(0)
+			continue
+		}
+		offs << u32(out.len)
+		out << entries
+		// End-of-list terminator: (0, 0).
+		put_u64(mut out, 0)
+		put_u64(mut out, 0)
+	}
+	return out, offs
+}
+
+// loc_expr encodes one location-list entry's expression: DW_OP_regN for
+// registers, DW_OP_bregN plus a signed offset otherwise. Empty output means
+// the location is not encodable and the caller must skip the range.
+fn loc_expr(is_reg bool, reg int, breg int, off i32) []u8 {
+	mut out := []u8{}
+	if is_reg {
+		if reg < 0 || reg > 31 {
+			return []u8{}
+		}
+		out << u8(0x50 + reg)
 		return out
 	}
-	out << u8(0x70 + p.breg)
-	put_sleb(mut out, i64(p.offset))
+	if breg < 0 || breg > 31 {
+		return []u8{}
+	}
+	out << u8(0x70 + breg)
+	put_sleb(mut out, i64(off))
 	return out
+}
+
+// param_expr encodes one parameter's entry location as a DWARF expression.
+fn param_expr(p emit.EmitParam) []u8 {
+	return loc_expr(p.is_reg, p.reg, p.breg, p.offset)
 }
 
 // build_line emits a DWARF 4 .debug_line section for one compilation unit:

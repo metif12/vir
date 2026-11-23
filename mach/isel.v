@@ -185,6 +185,7 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 			has_dst: true
 			srcs:    [imm_operand(v)]
 			line:    sel.lines[id]
+			ssa_id:  id
 		}
 	}
 	for i, blk_id in f.blocks {
@@ -479,6 +480,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 	for e in emit {
 		mut le := e
 		le.line = sel.lines[int(val_id)]
+		le.ssa_id = int(val_id)
 		out.blocks[blk].instrs << le
 	}
 }

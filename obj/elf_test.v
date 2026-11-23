@@ -229,6 +229,7 @@ fn test_elf_with_debug_sections() {
 	e.debug_info = [u8(1), 2, 3, 0]
 	e.debug_abbrev = [u8(4), 5, 6, 0]
 	e.debug_line = [u8(7), 8, 0]
+	e.debug_loc = [u8(9), 0]
 	path := tmp_obj_path('debug')
 	defer {
 		os.rm(path) or {}
@@ -236,7 +237,7 @@ fn test_elf_with_debug_sections() {
 	e.write(path)!
 	buf := os.read_bytes(path)!
 
-	assert rd_u16(buf, 60) == 12 // nine base sections plus three DWARF ones
+	assert rd_u16(buf, 60) == 13 // nine base sections plus four DWARF ones
 	shoff := int(rd_u64(buf, 40))
 	shstr_hdr := shoff + 7 * 64
 	shstr_off := int(rd_u64(buf, shstr_hdr + 24))
@@ -256,6 +257,11 @@ fn test_elf_with_debug_sections() {
 	assert cstr_at(buf, shstr_off + int(rd_u32(buf, line_hdr))) == '.debug_line'
 	line_off := int(rd_u64(buf, line_hdr + 24))
 	assert buf[line_off..line_off + 3] == e.debug_line
+
+	loc_hdr := shoff + 12 * 64
+	assert cstr_at(buf, shstr_off + int(rd_u32(buf, loc_hdr))) == '.debug_loc'
+	loc_off := int(rd_u64(buf, loc_hdr + 24))
+	assert buf[loc_off..loc_off + 2] == e.debug_loc
 }
 
 fn test_write_failure_returns_error() {

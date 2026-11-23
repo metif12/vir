@@ -1,5 +1,6 @@
 module cminus
 
+import pipeline
 import vssa.ssa
 
 // Codegen lowers a C-minus AST into a `ssa.Module`. Locals become allocas;
@@ -20,6 +21,7 @@ mut:
 	next_ext          int
 	cur_line          int
 	lines             map[int]int
+	var_names         map[int][]string
 }
 
 // generate builds a module from parsed C-minus functions.
@@ -28,21 +30,30 @@ pub fn generate(funcs []Func) !&ssa.Module {
 	return m
 }
 
-// generate_with_lines builds a module plus a line table mapping each emitted
-// instruction value id to its source line. The optimizer may add or remove
-// instructions later, so consumers must tolerate missing keys (line 0).
+// generate_with_lines builds a module plus a line table (see generate_with_debug).
 pub fn generate_with_lines(funcs []Func) !(&ssa.Module, map[int]int) {
+	m, dbg := generate_with_debug(funcs)!
+	return m, dbg.lines
+}
+
+// generate_with_debug builds a module plus frontend debug info: a line table
+// mapping each emitted instruction value id to its source line, and a
+// variable table mapping non-constant instruction value ids to the source
+// variables they were stored into. Constants share one value id across
+// variables, so they are deliberately left out.
+pub fn generate_with_debug(funcs []Func) !(&ssa.Module, pipeline.FrontDebug) {
 	mut m := ssa.Module.new()
 	i32_t := m.type_store.get_int(32)
 	mut cg := Codegen{
-		m:        m
-		i32_t:    i32_t
-		ptr_i32:  m.type_store.get_ptr(i32_t)
-		void_t:   ssa.TypeID(0)
-		vars:     map[string]ssa.ValueID{}
-		func_ids: map[string]int{}
-		next_ext: funcs.len
-		lines:    map[int]int{}
+		m:         m
+		i32_t:     i32_t
+		ptr_i32:   m.type_store.get_ptr(i32_t)
+		void_t:    ssa.TypeID(0)
+		vars:      map[string]ssa.ValueID{}
+		func_ids:  map[string]int{}
+		next_ext:  funcs.len
+		lines:     map[int]int{}
+		var_names: map[int][]string{}
 	}
 
 	// Declare all functions first so calls can resolve to a func_ref.
@@ -52,7 +63,23 @@ pub fn generate_with_lines(funcs []Func) !(&ssa.Module, map[int]int) {
 	for f in funcs {
 		cg.emit_func(f)!
 	}
-	return m, cg.lines
+	return m, pipeline.FrontDebug{
+		lines: cg.lines
+		vars:  cg.var_names
+	}
+}
+
+// note_var attributes a computed value to a source variable for DWARF
+// location lists. Constants are skipped: one constant value id is shared
+// across variables and has no single home.
+fn (mut cg Codegen) note_var(vid ssa.ValueID, name string) {
+	if name == '' {
+		return
+	}
+	if cg.m.values[int(vid)].kind == .constant {
+		return
+	}
+	cg.var_names[int(vid)] << name
 }
 
 // add emits one instruction and records its source line for the DWARF line
@@ -131,6 +158,7 @@ fn (mut cg Codegen) emit_stmt(s Stmt) ! {
 			}
 			_ = cg.add(.store, cg.cur, cg.void_t, [v, slot])
 			cg.vars[s.name] = slot
+			cg.note_var(v, s.name)
 		}
 		.assign {
 			mut v := cg.zero()
@@ -139,6 +167,7 @@ fn (mut cg Codegen) emit_stmt(s Stmt) ! {
 			}
 			if slot := cg.vars[s.name] {
 				_ = cg.add(.store, cg.cur, cg.void_t, [v, slot])
+				cg.note_var(v, s.name)
 			} else {
 				return error('cminus: assignment to unknown variable ${s.name}')
 			}
