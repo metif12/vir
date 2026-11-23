@@ -20,6 +20,7 @@ pub:
 	lhs     ?&Expr
 	rhs     ?&Expr
 	args    []&Expr
+	line    int
 }
 
 pub enum StmtKind {
@@ -42,6 +43,7 @@ pub:
 	then_body []Stmt
 	else_body []Stmt
 	body      []Stmt
+	line      int
 }
 
 pub struct Func {
@@ -49,6 +51,7 @@ pub:
 	name   string
 	params []string
 	body   []Stmt
+	line   int
 }
 
 pub struct Parser {
@@ -98,7 +101,7 @@ fn (mut p Parser) expect(k TokKind) !Token {
 }
 
 fn (mut p Parser) parse_func() !Func {
-	_ = p.expect(.kw_int)!
+	kw := p.expect(.kw_int)!
 	name := p.expect(.ident)!.text
 	_ = p.expect(.lparen)!
 	mut params := []string{}
@@ -113,7 +116,7 @@ fn (mut p Parser) parse_func() !Func {
 	}
 	_ = p.expect(.rparen)!
 	body := p.parse_block_stmts()!
-	return Func{ name: name, params: params, body: body }
+	return Func{ name: name, params: params, body: body, line: kw.line }
 }
 
 fn (mut p Parser) parse_block_stmts() ![]Stmt {
@@ -131,17 +134,18 @@ fn (mut p Parser) parse_block_stmts() ![]Stmt {
 
 fn (mut p Parser) parse_stmt() !Stmt {
 	if p.peek().kind == .lbrace {
-		return Stmt{ kind: .block, body: p.parse_block_stmts()! }
+		line := p.peek().line
+		return Stmt{ kind: .block, body: p.parse_block_stmts()!, line: line }
 	}
 	match p.peek().kind {
 		.kw_return {
-			p.advance()
+			t := p.advance()
 			e := p.parse_expr()!
 			_ = p.expect(.semi)!
-			return Stmt{ kind: .ret, expr: e }
+			return Stmt{ kind: .ret, expr: e, line: t.line }
 		}
 		.kw_if {
-			p.advance()
+			t := p.advance()
 			_ = p.expect(.lparen)!
 			c := p.parse_expr()!
 			_ = p.expect(.rparen)!
@@ -150,42 +154,44 @@ fn (mut p Parser) parse_stmt() !Stmt {
 			if p.accept(.kw_else) {
 				else_s << p.parse_stmt()!
 			}
-			return Stmt{ kind: .if_, cond: c, then_body: [then_s], else_body: else_s }
+			return Stmt{ kind: .if_, cond: c, then_body: [then_s], else_body: else_s, line: t.line }
 		}
 		.kw_while {
-			p.advance()
+			t := p.advance()
 			_ = p.expect(.lparen)!
 			c := p.parse_expr()!
 			_ = p.expect(.rparen)!
 			body_s := p.parse_stmt()!
-			return Stmt{ kind: .while_, cond: c, body: [body_s] }
+			return Stmt{ kind: .while_, cond: c, body: [body_s], line: t.line }
 		}
 		.kw_int {
-			p.advance()
+			t := p.advance()
 			name := p.expect(.ident)!.text
 			mut init := ?&Expr(none)
 			if p.accept(.assign) {
 				init = p.parse_expr()!
 			}
 			_ = p.expect(.semi)!
-			return Stmt{ kind: .decl, name: name, init: init }
+			return Stmt{ kind: .decl, name: name, init: init, line: t.line }
 		}
 		.semi {
-			p.advance()
-			return Stmt{ kind: .block, body: []Stmt{} }
+			t := p.advance()
+			return Stmt{ kind: .block, body: []Stmt{}, line: t.line }
 		}
 		else {}
 	}
 	if p.peek().kind == .ident && p.toks[p.pos + 1].kind == .assign {
+		line := p.peek().line
 		name := p.advance().text
 		p.advance()
 		e := p.parse_expr()!
 		_ = p.expect(.semi)!
-		return Stmt{ kind: .assign, name: name, expr: e }
+		return Stmt{ kind: .assign, name: name, expr: e, line: line }
 	}
+	line := p.peek().line
 	e := p.parse_expr()!
 	_ = p.expect(.semi)!
-	return Stmt{ kind: .expr_stmt, expr: e }
+	return Stmt{ kind: .expr_stmt, expr: e, line: line }
 }
 
 fn (mut p Parser) parse_expr() !&Expr {
@@ -195,9 +201,9 @@ fn (mut p Parser) parse_expr() !&Expr {
 fn (mut p Parser) parse_equality() !&Expr {
 	mut lhs := p.parse_relational()!
 	for p.peek().kind == .eqeq || p.peek().kind == .ne {
-		op := p.advance().kind
+		op := p.advance()
 		rhs := p.parse_relational()!
-		lhs = &Expr{ kind: .binary, op: op, lhs: lhs, rhs: rhs }
+		lhs = &Expr{ kind: .binary, op: op.kind, lhs: lhs, rhs: rhs, line: op.line }
 	}
 	return lhs
 }
@@ -206,9 +212,9 @@ fn (mut p Parser) parse_relational() !&Expr {
 	mut lhs := p.parse_additive()!
 	k := p.peek().kind
 	if k == .lt || k == .gt || k == .le || k == .ge {
-		op := p.advance().kind
+		op := p.advance()
 		rhs := p.parse_additive()!
-		lhs = &Expr{ kind: .binary, op: op, lhs: lhs, rhs: rhs }
+		lhs = &Expr{ kind: .binary, op: op.kind, lhs: lhs, rhs: rhs, line: op.line }
 	}
 	return lhs
 }
@@ -216,9 +222,9 @@ fn (mut p Parser) parse_relational() !&Expr {
 fn (mut p Parser) parse_additive() !&Expr {
 	mut lhs := p.parse_multiplicative()!
 	for p.peek().kind == .plus || p.peek().kind == .minus {
-		op := p.advance().kind
+		op := p.advance()
 		rhs := p.parse_multiplicative()!
-		lhs = &Expr{ kind: .binary, op: op, lhs: lhs, rhs: rhs }
+		lhs = &Expr{ kind: .binary, op: op.kind, lhs: lhs, rhs: rhs, line: op.line }
 	}
 	return lhs
 }
@@ -226,17 +232,18 @@ fn (mut p Parser) parse_additive() !&Expr {
 fn (mut p Parser) parse_multiplicative() !&Expr {
 	mut lhs := p.parse_unary()!
 	for p.peek().kind == .star || p.peek().kind == .slash || p.peek().kind == .percent {
-		op := p.advance().kind
+		op := p.advance()
 		rhs := p.parse_unary()!
-		lhs = &Expr{ kind: .binary, op: op, lhs: lhs, rhs: rhs }
+		lhs = &Expr{ kind: .binary, op: op.kind, lhs: lhs, rhs: rhs, line: op.line }
 	}
 	return lhs
 }
 
 fn (mut p Parser) parse_unary() !&Expr {
-	if p.accept(.minus) {
+	if p.peek().kind == .minus {
+		t := p.advance()
 		e := p.parse_unary()!
-		return &Expr{ kind: .neg, rhs: e }
+		return &Expr{ kind: .neg, rhs: e, line: t.line }
 	}
 	return p.parse_primary()
 }
@@ -246,7 +253,7 @@ fn (mut p Parser) parse_primary() !&Expr {
 	match t.kind {
 		.number {
 			p.advance()
-			return &Expr{ kind: .int_lit, int_val: t.int_val }
+			return &Expr{ kind: .int_lit, int_val: t.int_val, line: t.line }
 		}
 		.lparen {
 			p.advance()
@@ -268,9 +275,9 @@ fn (mut p Parser) parse_primary() !&Expr {
 					}
 				}
 				_ = p.expect(.rparen)!
-				return &Expr{ kind: .call, name: t.text, args: args }
+				return &Expr{ kind: .call, name: t.text, args: args, line: t.line }
 			}
-			return &Expr{ kind: .var_ref, name: t.text }
+			return &Expr{ kind: .var_ref, name: t.text, line: t.line }
 		}
 		else {
 			return error('cminus: line ${t.line}: expected an expression, got ${t.kind}')

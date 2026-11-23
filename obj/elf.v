@@ -39,6 +39,7 @@ pub mut:
 	rodata_data  []u8
 	debug_info   []u8
 	debug_abbrev []u8
+	debug_line   []u8
 
 	// Symbol Table
 	symbols        []ElfSymbol
@@ -194,15 +195,17 @@ pub fn (mut e ElfObject) write(path string) ! {
 	has_debug := e.debug_info.len > 0
 	mut off_debug_info_name := 0
 	mut off_debug_abbrev_name := 0
+	mut off_debug_line_name := 0
 	if has_debug {
 		off_debug_info_name = e.add_sh_string('.debug_info')
 		off_debug_abbrev_name = e.add_sh_string('.debug_abbrev')
+		off_debug_line_name = e.add_sh_string('.debug_line')
 	}
 
 	// Calculate Offsets
 	ehdr_size := 64
 	shdr_entry_size := 64
-	num_sections := if has_debug { 11 } else { 9 }
+	num_sections := if has_debug { 12 } else { 9 }
 
 	mut current_offset := ehdr_size
 
@@ -256,6 +259,8 @@ pub fn (mut e ElfObject) write(path string) ! {
 	current_offset += e.debug_info.len
 	off_debug_abbrev := current_offset
 	current_offset += e.debug_abbrev.len
+	off_debug_line := current_offset
+	current_offset += e.debug_line.len
 
 	// Section Headers (Align 8)
 	if current_offset % 8 != 0 {
@@ -349,6 +354,7 @@ pub fn (mut e ElfObject) write(path string) ! {
 	if has_debug {
 		buf << e.debug_info
 		buf << e.debug_abbrev
+		buf << e.debug_line
 	}
 
 	// --- 4. Write Section Headers ---
@@ -398,11 +404,14 @@ pub fn (mut e ElfObject) write(path string) ! {
 	write_shdr(mut buf, u32(off_gnu_stack_name), sht_progbits, 0, 0, 0, 0, 0, 1, 0)
 
 	if has_debug {
-		// 9: .debug_info, 10: .debug_abbrev (non-alloc, align 1).
+		// 9: .debug_info, 10: .debug_abbrev, 11: .debug_line
+		// (non-alloc, align 1).
 		write_shdr(mut buf, u32(off_debug_info_name), sht_progbits, 0, u64(off_debug_info),
 			u64(e.debug_info.len), 0, 0, 1, 0)
 		write_shdr(mut buf, u32(off_debug_abbrev_name), sht_progbits, 0, u64(off_debug_abbrev),
 			u64(e.debug_abbrev.len), 0, 0, 1, 0)
+		write_shdr(mut buf, u32(off_debug_line_name), sht_progbits, 0, u64(off_debug_line),
+			u64(e.debug_line.len), 0, 0, 1, 0)
 	}
 
 	os.write_file_array(path, buf) or {

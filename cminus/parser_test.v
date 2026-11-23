@@ -33,3 +33,17 @@ fn test_parse_call() {
 	ret := funcs[0].body[0]
 	assert ret.expr or { panic('no expr') }.kind == .call
 }
+
+fn test_parse_records_source_lines() {
+	funcs := parse('int main() {\nint x = 1;\nif (x > 0) {\nreturn x;\n}\nreturn 0;\n}')!
+	assert funcs[0].line == 1
+	assert funcs[0].body[0].kind == .decl
+	assert funcs[0].body[0].line == 2
+	assert funcs[0].body[1].kind == .if_
+	assert funcs[0].body[1].line == 3
+	ret := funcs[0].body[1].then_body[0].body[0]
+	assert ret.kind == .ret
+	assert ret.line == 4
+	assert ret.expr or { panic('no expr') }.line == 4
+	assert funcs[0].body[2].line == 6
+}

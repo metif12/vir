@@ -21,7 +21,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `mach/` — machine IR, ISel, linear-scan regalloc
 - `emit/` — amd64 emitter
 - `obj/` — ELF64, Windows/amd64 COFF and macOS/amd64 MachO object writers
-- `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs)
+- `dwarf/` — minimal DWARF 4 producer (compile unit + subprogram DIEs + line table)
 - `bitcode/` — binary IR v1 encoder/decoder for the SSA core
 - `pipeline/` — lowering pipeline shared by `virc` and `libvir`
 - `libvir/` — C shared library, `vir.h`, and a pure-C end-to-end test
@@ -55,8 +55,11 @@ Requires a stock V compiler on PATH. `virc compile <in.vir> <out.o> [triple]`
 emits an ELF64 object for `amd64-linux-gnu`, a COFF object for
 `amd64-windows-msvc`, or a MachO object for `amd64-macos-darwin`. The first
 two link and run with gcc; the MachO object links with `lld -flavor darwin`
-but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit
-and subprogram info (no line tables yet), verifiable with `llvm-dwarfdump`.
+but cannot be executed on this host. ELF objects carry DWARF 4 compile-unit,
+subprogram and line-table info, verifiable with `llvm-dwarfdump`. Line rows
+exist only for modules compiled from a frontend AST in memory (`generate_with_lines`
++ `compile_module_lines`): `.vir` text and bitcode v1 carry no source lines, so
+file-path objects get a valid but empty line program.
 `virc cminus <in.c> [out.vir]` runs the C-minus frontend; `virc vmini <in.v>
 [out.vir]` runs the V-subset frontend. `virc bitcode encode <in.vir> <out.vbc>`
 and `virc bitcode decode <in.vbc> [out.vir]` convert between text IR and the

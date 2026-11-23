@@ -34,15 +34,25 @@ pub mut:
 	addend i64
 }
 
+// LineRow maps one text-section offset to its 1-based source line: the
+// address side of a DWARF line-table row. Rows are section-relative, like
+// EmitSym offsets, so the object writer needs no relocation for them.
+pub struct LineRow {
+pub mut:
+	offset u32
+	line   int
+}
+
 // EmitOutput is the plain-data result of emission, consumed by the object
 // writer. data and rodata stay empty in v1: no globals are lowered yet.
 pub struct EmitOutput {
 pub mut:
-	text   []u8
-	data   []u8
-	rodata []u8
-	syms   []EmitSym
-	relocs []EmitReloc
+	text      []u8
+	data      []u8
+	rodata    []u8
+	syms      []EmitSym
+	relocs    []EmitReloc
+	line_rows []LineRow
 }
 
 // fp_vreg mirrors mach's private frame-pointer placeholder. It is only valid
@@ -52,11 +62,12 @@ const fp_vreg = -100
 // Emitter accumulates text, symbols and relocations across all functions.
 struct Emitter {
 mut:
-	text    []u8
-	syms    []EmitSym
-	sym_idx map[string]int
-	relocs  []EmitReloc
-	shadow  int
+	text      []u8
+	syms      []EmitSym
+	sym_idx   map[string]int
+	relocs    []EmitReloc
+	line_rows []LineRow
+	shadow    int
 }
 
 // BranchPatch records one rel32 field awaiting its target block's offset.
@@ -92,9 +103,10 @@ pub fn emit_amd64(m &mach.MachineModule, t target.Triple) !EmitOutput {
 		e.emit_func(f)!
 	}
 	return EmitOutput{
-		text:   e.text
-		syms:   e.syms
-		relocs: e.relocs
+		text:      e.text
+		syms:      e.syms
+		relocs:    e.relocs
+		line_rows: e.line_rows
 	}
 }
 
@@ -134,6 +146,14 @@ fn (mut e Emitter) emit_func(f mach.MachineFunc) ! {
 	for b in f.blocks {
 		ctx.block_offs[b.id] = e.text.len
 		for ins in b.instrs {
+			// Record the line row before encoding: the row address is the
+			// offset of the instruction's first byte. Line 0 (unknown)
+			// carries no row; consecutive duplicates are merged by DWARF.
+			if ins.line > 0 {
+				if e.line_rows.len == 0 || e.line_rows[e.line_rows.len - 1].line != ins.line {
+					e.line_rows << LineRow{ offset: u32(e.text.len), line: ins.line }
+				}
+			}
 			e.emit_instr(ins, mut ctx)!
 		}
 	}

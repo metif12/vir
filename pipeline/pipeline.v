@@ -15,13 +15,21 @@ import dwarf
 // compile_module optimizes `m`, lowers it for `triple`, and writes an ELF64
 // relocatable object to `path`. In v1 only amd64 targets can be emitted.
 pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
+	compile_module_lines(mut m, triple, path, map[int]int{})!
+}
+
+// compile_module_lines lowers like compile_module and emits a DWARF line
+// table from the frontend's line table (SSA instruction value id to source
+// line). Modules parsed from `.vir` text carry no lines; pass an empty map
+// and only the line program shell is emitted.
+pub fn compile_module_lines(mut m ssa.Module, triple string, path string, lines map[int]int) ! {
 	t := target.parse_triple(triple)!
 	if t.arch != .amd64 {
 		return error('vir: object emission supports amd64 only, got ${t.arch}')
 	}
 
 	optimize.optimize(mut m)
-	mut mm := mach.select_machine(m, t)!
+	mut mm := mach.select_machine_lines(m, t, lines)!
 	mach.allocate(mut mm)!
 	mach.assert_no_vregs(mm)!
 	out := emit.emit_amd64(mm, t)!
@@ -46,9 +54,10 @@ pub fn compile_module(mut m ssa.Module, triple string, path string) ! {
 fn write_elf(out emit.EmitOutput, path string) ! {
 	mut elf := obj.ElfObject.new(obj.em_x86_64)
 	elf.text_data = out.text
-	dwarf_secs := dwarf.build(out.syms, 'vir 0.1.0', '.', 'vir-module')
+	dwarf_secs := dwarf.build(out.syms, out.line_rows, 'vir 0.1.0', '.', 'vir-module')
 	elf.debug_info = dwarf_secs.info
 	elf.debug_abbrev = dwarf_secs.abbrev
+	elf.debug_line = dwarf_secs.line
 	// ELF reserves symbol index 0 for the null symbol, so emitter indices
 	// shift by one on their way into the object's symbol table.
 	mut elf_idx := []int{len: out.syms.len}

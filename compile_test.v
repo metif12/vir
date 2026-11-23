@@ -68,7 +68,7 @@ fn test_compile_file_emits_elf_object() {
 	assert buf[3] == 0x46 // F
 	assert rd_u16(buf, 16) == 1 // ET_REL
 	assert rd_u16(buf, 18) == 62 // EM_X86_64
-	assert rd_u16(buf, 60) == 11 // nine base sections plus .debug_info/.debug_abbrev
+	assert rd_u16(buf, 60) == 12 // nine base sections plus .debug_info/.debug_abbrev/.debug_line
 
 	shoff := int(rd_u64(buf, 40))
 	text_off := section_off(buf, shoff, 1)

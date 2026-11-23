@@ -15,10 +15,19 @@ pub struct MachineSelector {
 mut:
 	next_vreg int
 	sym       map[int]Reg
+	// lines maps an SSA instruction value id to its 1-based source line.
+	// Missing keys mean line 0 (unknown); the line emitter skips those.
+	lines map[int]int
 }
 
 // select_machine lowers a module to machine IR for the triple's arch.
 pub fn select_machine(m &ssa.Module, t target.Triple) !MachineModule {
+	return select_machine_lines(m, t, map[int]int{})
+}
+
+// select_machine_lines lowers like select_machine and stamps each machine
+// instruction with its source line from the frontend's line table.
+pub fn select_machine_lines(m &ssa.Module, t target.Triple, lines map[int]int) !MachineModule {
 	if t.arch != .amd64 && t.arch != .arm64 {
 		return error('vir: machine selector supports amd64 and arm64, not ${t.arch}')
 	}
@@ -27,8 +36,9 @@ pub fn select_machine(m &ssa.Module, t target.Triple) !MachineModule {
 	mut sel := MachineSelector{
 		triple:  t
 		cc:      cc
-		ret_reg: target.PhysReg{arch: ret_arch, index: 0}
+		ret_reg: target.PhysReg{ arch: ret_arch, index: 0 }
 		sym:     map[int]Reg{}
+		lines:   lines
 	}
 	mut out := MachineModule{
 		triple: '${t.arch}-${t.os}-${t.abi}'
@@ -86,6 +96,7 @@ fn block_target(blocks map[int]int, id int) !int {
 	}
 	return error('vir: branch targets unknown block @b${id}')
 }
+
 // cond_for maps an SSA comparison to a branch condition.
 fn cond_for(op ssa.OpCode) !Cond {
 	return match op {
@@ -170,6 +181,7 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 			dst:     reg_operand(r)
 			has_dst: true
 			srcs:    [imm_operand(v)]
+			line:    sel.lines[id]
 		}
 	}
 	for i, blk_id in f.blocks {
@@ -185,7 +197,7 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 	mut arg_kinds := []target.Arg{}
 	for p in f.params {
 		w := int_width(m, m.values[int(p)].typ)!
-		arg_kinds << target.Arg{kind: .int_kind, width: w}
+		arg_kinds << target.Arg{ kind: .int_kind, width: w }
 	}
 	locs := target.assign_args(sel.cc, arg_kinds)!
 	for n, p in f.params {
@@ -362,7 +374,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 					srcs:    [reg_operand(v)]
 				}
 			}
-			emit << MachineInstr{op: .ret}
+			emit << MachineInstr{ op: .ret }
 		}
 		.call {
 			if instr.operands.len == 0 {
@@ -375,7 +387,7 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			mut arg_kinds := []target.Arg{}
 			for a in instr.operands[1..] {
 				w := int_width(m, m.values[int(a)].typ)!
-				arg_kinds << target.Arg{kind: .int_kind, width: w}
+				arg_kinds << target.Arg{ kind: .int_kind, width: w }
 			}
 			locs := target.assign_args(sel.cc, arg_kinds)!
 			for n, a in instr.operands[1..] {
@@ -460,6 +472,8 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 		}
 	}
 	for e in emit {
-		out.blocks[blk].instrs << e
+		mut le := e
+		le.line = sel.lines[int(val_id)]
+		out.blocks[blk].instrs << le
 	}
 }

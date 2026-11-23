@@ -144,6 +144,9 @@ pub mut:
 	srcs    []Operand
 	target  int
 	symbol  string
+	// line is the 1-based source line for the DWARF line table, 0 when
+	// unknown (implicit code, optimizer-synthesized instructions).
+	line int
 }
 
 // MachineBlock is one machine basic block.

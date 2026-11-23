@@ -18,10 +18,20 @@ mut:
 	vars              map[string]ssa.ValueID
 	func_ids          map[string]int
 	next_ext          int
+	cur_line          int
+	lines             map[int]int
 }
 
 // generate builds a module from parsed C-minus functions.
 pub fn generate(funcs []Func) !&ssa.Module {
+	m, _ := generate_with_lines(funcs)!
+	return m
+}
+
+// generate_with_lines builds a module plus a line table mapping each emitted
+// instruction value id to its source line. The optimizer may add or remove
+// instructions later, so consumers must tolerate missing keys (line 0).
+pub fn generate_with_lines(funcs []Func) !(&ssa.Module, map[int]int) {
 	mut m := ssa.Module.new()
 	i32_t := m.type_store.get_int(32)
 	mut cg := Codegen{
@@ -32,6 +42,7 @@ pub fn generate(funcs []Func) !&ssa.Module {
 		vars:     map[string]ssa.ValueID{}
 		func_ids: map[string]int{}
 		next_ext: funcs.len
+		lines:    map[int]int{}
 	}
 
 	// Declare all functions first so calls can resolve to a func_ref.
@@ -41,7 +52,18 @@ pub fn generate(funcs []Func) !&ssa.Module {
 	for f in funcs {
 		cg.emit_func(f)!
 	}
-	return m
+	return m, cg.lines
+}
+
+// add emits one instruction and records its source line for the DWARF line
+// table. Instructions from implicit code (epilogue returns) keep line 0 and
+// are skipped by the line emitter.
+fn (mut cg Codegen) add(op ssa.OpCode, block ssa.BlockID, typ ssa.TypeID, operands []ssa.ValueID) ssa.ValueID {
+	vid := cg.m.add_instr(op, block, typ, operands)
+	if cg.cur_line > 0 {
+		cg.lines[int(vid)] = cg.cur_line
+	}
+	return vid
 }
 
 fn (mut cg Codegen) zero() ssa.ValueID {
@@ -62,6 +84,7 @@ fn (mut cg Codegen) new_block(name string) ssa.BlockID {
 fn (mut cg Codegen) emit_func(f Func) ! {
 	cg.vars = map[string]ssa.ValueID{}
 	cg.current_func_name = f.name
+	cg.cur_line = f.line
 	fid := cg.func_ids[f.name]
 	entry := cg.m.add_block(fid, 'entry')
 	cg.cur = entry
@@ -71,13 +94,13 @@ fn (mut cg Codegen) emit_func(f Func) ! {
 	for i, pname in f.params {
 		arg := cg.m.add_value(.argument, cg.i32_t, pname, i)
 		cg.m.func_add_param(fid, arg)
-		slot := cg.m.add_instr(.alloca, cg.cur, cg.ptr_i32, [])
-		_ = cg.m.add_instr(.store, cg.cur, cg.void_t, [arg, slot])
+		slot := cg.add(.alloca, cg.cur, cg.ptr_i32, [])
+		_ = cg.add(.store, cg.cur, cg.void_t, [arg, slot])
 		cg.vars[pname] = slot
 	}
 	cg.emit_stmts(f.body)!
 	if !cg.terminated {
-		cg.m.add_instr(.ret, cg.cur, cg.i32_t, [zero])
+		cg.add(.ret, cg.cur, cg.i32_t, [zero])
 		cg.terminated = true
 	}
 }
@@ -95,17 +118,18 @@ fn (mut cg Codegen) emit_stmts(stmts []Stmt) ! {
 }
 
 fn (mut cg Codegen) emit_stmt(s Stmt) ! {
+	cg.cur_line = s.line
 	match s.kind {
 		.block {
 			cg.emit_stmts(s.body)!
 		}
 		.decl {
-			slot := cg.m.add_instr(.alloca, cg.cur, cg.ptr_i32, [])
+			slot := cg.add(.alloca, cg.cur, cg.ptr_i32, [])
 			mut v := cg.zero()
 			if init := s.init {
 				v = cg.emit_expr(init)!
 			}
-			_ = cg.m.add_instr(.store, cg.cur, cg.void_t, [v, slot])
+			_ = cg.add(.store, cg.cur, cg.void_t, [v, slot])
 			cg.vars[s.name] = slot
 		}
 		.assign {
@@ -114,7 +138,7 @@ fn (mut cg Codegen) emit_stmt(s Stmt) ! {
 				v = cg.emit_expr(e)!
 			}
 			if slot := cg.vars[s.name] {
-				_ = cg.m.add_instr(.store, cg.cur, cg.void_t, [v, slot])
+				_ = cg.add(.store, cg.cur, cg.void_t, [v, slot])
 			} else {
 				return error('cminus: assignment to unknown variable ${s.name}')
 			}
@@ -124,7 +148,7 @@ fn (mut cg Codegen) emit_stmt(s Stmt) ! {
 			if e := s.expr {
 				v = cg.emit_expr(e)!
 			}
-			cg.m.add_instr(.ret, cg.cur, cg.i32_t, [v])
+			cg.add(.ret, cg.cur, cg.i32_t, [v])
 			cg.terminated = true
 		}
 		.expr_stmt {
@@ -142,18 +166,19 @@ fn (mut cg Codegen) emit_stmt(s Stmt) ! {
 }
 
 fn (mut cg Codegen) emit_if(s Stmt) ! {
+	cg.cur_line = s.line
 	cond := cg.emit_expr(s.cond or { return error('cminus: if without condition') })!
 	then_b := cg.new_block('then')
 	else_b := cg.new_block('else')
 	merge_b := cg.new_block('merge')
-	cg.m.add_instr(.br, cg.cur, cg.void_t, [cond, ssa.ValueID(then_b), ssa.ValueID(else_b)])
+	cg.add(.br, cg.cur, cg.void_t, [cond, ssa.ValueID(then_b), ssa.ValueID(else_b)])
 	cg.terminated = true
 
 	cg.cur = then_b
 	cg.terminated = false
 	cg.emit_stmts(s.then_body)!
 	if !cg.terminated {
-		cg.m.add_instr(.jmp, cg.cur, cg.void_t, [ssa.ValueID(merge_b)])
+		cg.add(.jmp, cg.cur, cg.void_t, [ssa.ValueID(merge_b)])
 		cg.terminated = true
 	}
 
@@ -161,7 +186,7 @@ fn (mut cg Codegen) emit_if(s Stmt) ! {
 	cg.terminated = false
 	cg.emit_stmts(s.else_body)!
 	if !cg.terminated {
-		cg.m.add_instr(.jmp, cg.cur, cg.void_t, [ssa.ValueID(merge_b)])
+		cg.add(.jmp, cg.cur, cg.void_t, [ssa.ValueID(merge_b)])
 		cg.terminated = true
 	}
 
@@ -170,23 +195,24 @@ fn (mut cg Codegen) emit_if(s Stmt) ! {
 }
 
 fn (mut cg Codegen) emit_while(s Stmt) ! {
+	cg.cur_line = s.line
 	cond_b := cg.new_block('loop_cond')
 	body_b := cg.new_block('loop_body')
 	after_b := cg.new_block('loop_after')
-	cg.m.add_instr(.jmp, cg.cur, cg.void_t, [ssa.ValueID(cond_b)])
+	cg.add(.jmp, cg.cur, cg.void_t, [ssa.ValueID(cond_b)])
 	cg.terminated = true
 
 	cg.cur = cond_b
 	cg.terminated = false
 	cond := cg.emit_expr(s.cond or { return error('cminus: while without condition') })!
-	cg.m.add_instr(.br, cg.cur, cg.void_t, [cond, ssa.ValueID(body_b), ssa.ValueID(after_b)])
+	cg.add(.br, cg.cur, cg.void_t, [cond, ssa.ValueID(body_b), ssa.ValueID(after_b)])
 	cg.terminated = true
 
 	cg.cur = body_b
 	cg.terminated = false
 	cg.emit_stmts(s.body)!
 	if !cg.terminated {
-		cg.m.add_instr(.jmp, cg.cur, cg.void_t, [ssa.ValueID(cond_b)])
+		cg.add(.jmp, cg.cur, cg.void_t, [ssa.ValueID(cond_b)])
 		cg.terminated = true
 	}
 
@@ -195,25 +221,30 @@ fn (mut cg Codegen) emit_while(s Stmt) ! {
 }
 
 fn (mut cg Codegen) emit_expr(e &Expr) !ssa.ValueID {
+	prev := cg.cur_line
+	cg.cur_line = e.line
+	defer {
+		cg.cur_line = prev
+	}
 	match e.kind {
 		.int_lit {
 			return cg.const_val(e.int_val)
 		}
 		.var_ref {
 			if slot := cg.vars[e.name] {
-				return cg.m.add_instr(.load, cg.cur, cg.i32_t, [slot])
+				return cg.add(.load, cg.cur, cg.i32_t, [slot])
 			}
 			return error('cminus: unknown variable ${e.name}')
 		}
 		.neg {
 			rhs := cg.emit_expr(e.rhs or { return error('cminus: bad neg') })!
-			return cg.m.add_instr(.sub, cg.cur, cg.i32_t, [cg.zero(), rhs])
+			return cg.add(.sub, cg.cur, cg.i32_t, [cg.zero(), rhs])
 		}
 		.binary {
 			op := cg.binop(e.op)!
 			lhs := cg.emit_expr(e.lhs or { return error('cminus: bad lhs') })!
 			rhs := cg.emit_expr(e.rhs or { return error('cminus: bad rhs') })!
-			return cg.m.add_instr(op, cg.cur, cg.i32_t, [lhs, rhs])
+			return cg.add(op, cg.cur, cg.i32_t, [lhs, rhs])
 		}
 		.call {
 			mut args := []ssa.ValueID{}
@@ -225,7 +256,7 @@ fn (mut cg Codegen) emit_expr(e &Expr) !ssa.ValueID {
 			mut operands := []ssa.ValueID{}
 			operands << ref
 			operands << args
-			return cg.m.add_instr(.call, cg.cur, cg.i32_t, operands)
+			return cg.add(.call, cg.cur, cg.i32_t, operands)
 		}
 	}
 }

@@ -63,3 +63,18 @@ fn test_codegen_calls() {
 	assert text.contains(' call ')
 	assert text.contains(' add ')
 }
+
+fn test_codegen_line_table_covers_all_instructions() {
+	funcs := parse(fixture('while.c')!)!
+	m, lines := generate_with_lines(funcs)!
+	assert lines.len == m.instrs.len
+	for _, line in lines {
+		assert line > 0
+	}
+	// Every recorded line falls inside the fixture.
+	src := fixture('while.c')!
+	max_line := src.split_into_lines().len
+	for _, line in lines {
+		assert line <= max_line
+	}
+}
