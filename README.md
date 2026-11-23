@@ -12,8 +12,8 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 `doc/ir-spec.md` for the frozen IR grammar (v1).
 
 ## Layout
-- `main.v` — `virc` driver: `--version`, `verify <file.vir>`,
-  `opt <file.vir> [out.vir]`
+- `main.v` — `virc` driver: `--version`, `verify`/`opt`/`compile`,
+  `cminus`/`vmini` frontends, `jit` runner, `bitcode` converter
 - `vssa/` — vendored stabilized V compiler middle-end (see
   `PROVENANCE.md`): `ssa/` (IR + text format), `optimize/` (passes,
   pass manager, verifiers)
