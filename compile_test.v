@@ -118,3 +118,18 @@ fn test_compile_file_rejects_non_amd64() {
 	}
 	assert false, 'expected a rejection for arm64'
 }
+
+// test_compile_is_byte_identical pins object determinism: compiling the same
+// module twice must produce identical bytes (no timestamps, no map-order
+// nondeterminism leaking into sections).
+fn test_compile_is_byte_identical() {
+	a := obj_path('det_a')
+	b := obj_path('det_b')
+	defer {
+		os.rm(a) or {}
+		os.rm(b) or {}
+	}
+	compile_file(add_src, 'amd64-linux-gnu', a)!
+	compile_file(add_src, 'amd64-linux-gnu', b)!
+	assert os.read_bytes(a)! == os.read_bytes(b)!
+}
