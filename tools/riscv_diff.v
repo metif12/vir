@@ -3,11 +3,18 @@ module main
 // Differential harness for riscv64: for each C-minus fixture, compile it with
 // vir (frontend -> .vir -> riscv64 ELF object), statically link it with the
 // cross gcc in WSL, run it under qemu-riscv64, then compile and run the same
-// C source with the cross gcc directly. The two exit codes must match.
+// C source with the cross gcc directly. V-subset fixtures have no C
+// equivalent, so their oracle is the Windows JIT running the same module
+// in-process. All exit codes must match.
 // Requires virc.exe built and qemu-riscv64 + riscv64-linux-gnu-gcc in WSL.
 // Run with: v run tools/riscv_diff.v
 
 import os
+import cminus
+import vmini
+import pipeline
+import target
+import jit
 
 const wsl_tmp = '/tmp/vir_rv_diff'
 
@@ -37,10 +44,22 @@ fn exit_of(out string) int {
 	return -999
 }
 
+// jit_entry runs one V-subset source in-process through the Windows JIT and
+// returns its exit code: the oracle for the qemu-riscv64 runs below.
+fn jit_entry(src_path string) !int {
+	src := os.read_file(src_path)!
+	funcs := vmini.parse(src)!
+	mut m := cminus.generate(funcs)!
+	t := target.parse_triple('amd64-windows-msvc')!
+	out := pipeline.lower_module(mut m, t, map[int]int{})!
+	return jit.run(&out, 'main')!
+}
+
 fn main() {
 	root := @VMODROOT
 	virc := os.join_path(root, 'virc.exe')
 	src_dir := os.join_path(root, 'testdata', 'cminus')
+	vmini_dir := os.join_path(root, 'testdata', 'vmini')
 	out_dir := os.join_path(os.getenv('LOCALAPPDATA'), 'Temp', 'opencode', 'vir-rv-diff')
 	os.mkdir_all(out_dir)!
 
@@ -98,4 +117,47 @@ fn main() {
 		exit(1)
 	}
 	println('riscv_diff: ${total}/${total} matched cross-gcc under qemu-riscv64')
+
+	// V-subset fixtures have no C equivalent, so the oracle is the Windows
+	// JIT running the same module in-process: both must exit identically.
+	vfiles := os.ls(vmini_dir)!
+	for file in vfiles {
+		if !file.ends_with('.v') {
+			continue
+		}
+		total++
+		name := file[..file.len - 2]
+		src := os.join_path(vmini_dir, file)
+		ir := os.join_path(out_dir, 'v_${name}.vir')
+		obj := os.join_path(out_dir, 'v_${name}.o')
+
+		r1 := run([virc, 'vmini', src, ir])!
+		if r1.exit_code != 0 {
+			eprintln('riscv_diff: vmini/${name}: frontend failed: ${r1.output}')
+			failed++
+			continue
+		}
+		r2 := run([virc, 'compile', ir, obj, 'riscv64-linux-gnu'])!
+		if r2.exit_code != 0 {
+			eprintln('riscv_diff: vmini/${name}: object emission failed: ${r2.output}')
+			failed++
+			continue
+		}
+		vcmd := 'riscv64-linux-gnu-gcc -static ${win_to_wsl(obj)} -o ${wsl_tmp}/${name}_rv && qemu-riscv64 ${wsl_tmp}/${name}_rv; echo EXIT=$?'
+		rv := run(['wsl', '-e', 'sh', '-lc', vcmd])!
+		vcode := exit_of(rv.output)
+
+		jcode := jit_entry(src)!
+		if vcode != jcode {
+			eprintln('riscv_diff: vmini/${name}: MISMATCH qemu=${vcode} jit=${jcode}')
+			failed++
+		} else {
+			println('riscv_diff: vmini/${name}: OK (exit ${vcode})')
+		}
+	}
+	if failed > 0 {
+		eprintln('riscv_diff: ${failed}/${total} failed')
+		exit(1)
+	}
+	println('riscv_diff: all ${total} fixtures matched')
 }
