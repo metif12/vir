@@ -36,6 +36,7 @@ and the stock V compiler respectively. See `ROADMAP.md` for milestones and
 - `tools/cminus_diff.v` — Linux differential runner (vir vs gcc)
 - `tools/coff_diff.v` — Windows differential runner via native .exe files
 - `tools/vmini_diff.v` — V dogfood differential: vir vs the stock V compiler
+- `tools/riscv_diff.v` — riscv64 differential: vir vs cross-gcc under QEMU (V-subset via JIT oracle)
 - `tools/vir_opt_golden.v` — deliberately regenerate the optimizer golden files
 - `tools/vir_opt_determinism.v` — repeated-run byte-identity check
 - `tools/fuzz_diff.v` — seeded random-program differential fuzzer
