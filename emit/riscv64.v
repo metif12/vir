@@ -302,10 +302,7 @@ fn (mut e RiscvEmitter) emit_mov(ins mach.MachineInstr, mut ctx FuncCtx) ! {
 	match src.kind {
 		.reg { e.emit_addi(rv_a0, e.hw_reg(src.reg)!, 0)! }
 		.imm {
-			if src.imm < -2048 || src.imm > 2047 {
-				return error('vir: riscv64 mov immediate ${src.imm} needs movi')
-			}
-			e.emit_addi(rv_a0, 0, i32(src.imm))!
+			e.emit_li(rv_a0, src.imm)!
 		}
 		.mem, .slot {
 			base, disp := e.resolve_mem(src, ctx)!
@@ -325,6 +322,22 @@ fn (mut e RiscvEmitter) emit_mov(ins mach.MachineInstr, mut ctx FuncCtx) ! {
 	}
 }
 
+// emit_li materializes any 32-bit signed value: a single addi when it fits
+// in 12 bits, else lui plus addi with the standard rounding.
+fn (mut e RiscvEmitter) emit_li(dst int, v i64) ! {
+	if v >= -2048 && v <= 2047 {
+		e.emit_addi(dst, 0, i32(v))!
+		return
+	}
+	if v < -2147483648 || v > 4294967295 {
+		return error('vir: riscv64 immediate ${v} exceeds 32 bits')
+	}
+	hi := (v + 0x800) >> 12
+	lo := v - (hi << 12)
+	e.emit_u32(rv_lui(dst, u32(hi & 0xfffff)))
+	e.emit_addi(dst, dst, i32(lo))!
+}
+
 // emit_movi materializes a 32-bit constant. Larger values are rejected: v1
 // fixtures only need the low 32 bits and full 64-bit li synthesis can wait.
 fn (mut e RiscvEmitter) emit_movi(ins mach.MachineInstr, mut ctx FuncCtx) ! {
@@ -332,18 +345,8 @@ fn (mut e RiscvEmitter) emit_movi(ins mach.MachineInstr, mut ctx FuncCtx) ! {
 		return error('vir: riscv64 movi needs one immediate')
 	}
 	v := ins.srcs[0].imm
-	if v < -2147483648 || v > 4294967295 {
-		return error('vir: riscv64 movi immediate ${v} exceeds 32 bits')
-	}
 	dst := if ins.dst.kind == .reg { e.hw_reg(ins.dst.reg)! } else { rv_a0 }
-	if v >= -2048 && v <= 2047 {
-		e.emit_addi(dst, 0, i32(v))!
-	} else {
-		hi := (v + 0x800) >> 12
-		lo := v - (hi << 12)
-		e.emit_u32(rv_lui(dst, u32(hi & 0xfffff)))
-		e.emit_addi(dst, dst, i32(lo))!
-	}
+	e.emit_li(dst, v)!
 	if ins.dst.kind == .slot || ins.dst.kind == .mem {
 		base, disp := e.resolve_mem(ins.dst, ctx)!
 		e.emit_sd(rv_a0, base, disp)!
@@ -400,11 +403,8 @@ fn (mut e RiscvEmitter) operand_in_reg(o mach.Operand, tmp int, mut ctx FuncCtx)
 			return e.hw_reg(o.reg)!
 		}
 		.imm {
-			if o.imm >= -2048 && o.imm <= 2047 {
-				e.emit_addi(tmp, 0, i32(o.imm))!
-				return tmp
-			}
-			return error('vir: riscv64 large immediates need movi, got ${o.imm}')
+			e.emit_li(tmp, o.imm)!
+			return tmp
 		}
 		.mem, .slot {
 			base, disp := e.resolve_mem(o, ctx)!

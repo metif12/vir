@@ -113,9 +113,10 @@ fn test_regalloc_spilled_pointer_base_binds_frame() {
 	mut mm := select_machine(m, t)!
 	allocate(mut mm)!
 	assert_no_vregs(mm)!
-	// x (used by the call and the store) and the constant (materialized
-	// before the call, used after) both cross it, so both spill.
-	assert mm.funcs[1].stack_slots == 2
+	// x (used by the call and as the store base) crosses the call and spills.
+	// The constant 1 now lowers to an immediate at its uses, so it needs no
+	// register and no spill slot: one slot total.
+	assert mm.funcs[1].stack_slots == 1
 	text := mach_to_text(mm)
 	assert text.contains('[fp-8]')
 }
@@ -128,7 +129,9 @@ fn build_loop_module() &ssa.Module {
 	void_t := ssa.TypeID(0)
 	fid := m.new_function('loop', i32_t)
 	zero := m.get_or_add_const(i32_t, '0')
-	five := m.get_or_add_const(i32_t, '5')
+	// A 33-bit loop bound cannot use immediates anywhere, so it keeps a
+	// materialized register home: the loop body must not clobber it.
+	five := m.get_or_add_const(i32_t, '3000000000')
 	one := m.get_or_add_const(i32_t, '1')
 	entry := m.add_block(fid, 'entry')
 	mut i_slot := m.add_instr(.alloca, entry, m.type_store.get_ptr(i32_t), [])
@@ -167,7 +170,7 @@ fn test_regalloc_loop_invariant_not_clobbered() {
 	mut const_reg := ''
 	for line in text.split_into_lines() {
 		tline := line.trim(' ')
-		if tline.contains('movi 5') {
+		if tline.contains('movi 3000000000') {
 			const_reg = tline.split(' = ')[0]
 		}
 	}

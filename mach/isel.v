@@ -74,6 +74,20 @@ fn (mut sel MachineSelector) vreg_for(m &ssa.Module, id ssa.ValueID) !Reg {
 	return r
 }
 
+// operand_for resolves an SSA value to a machine operand: constants that fit
+// in a signed 32-bit immediate lower to immediates at their uses (every ALU,
+// move, call and return form encodes those), so they never occupy a register
+// across the function. Anything else takes a virtual register as before.
+fn (mut sel MachineSelector) operand_for(m &ssa.Module, id ssa.ValueID) !Operand {
+	if int(id) > 0 && int(id) < m.values.len && m.values[int(id)].kind == .constant {
+		v := const_int(m, id)!
+		if v >= -2147483648 && v <= 2147483647 {
+			return imm_operand(v)
+		}
+	}
+	return reg_operand(sel.vreg_for(m, id)!)
+}
+
 // int_width returns the byte width of an integer or pointer type.
 fn int_width(m &ssa.Module, typ ssa.TypeID) !int {
 	if int(typ) < 0 || int(typ) >= m.type_store.types.len {
@@ -172,14 +186,29 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 	}
 	// Every constant value gets a movi at the top of the entry block, in
 	// ID order, so uses (including detached dead code) never dangle.
+	// (Materialized below, after lowering knows which constants took a
+	// register; rematerialized i32 constants use immediates at their uses
+	// and need no home.)
+	for i, blk_id in f.blocks {
+		blk := m.blocks[int(blk_id)]
+		for val_id in blk.instrs {
+			sel.select_instr(m, val_id, mut out, i, blocks)!
+		}
+	}
+	// Materialize the constants that lowering kept in registers (the rest
+	// became immediates at their uses and need no home).
+	mut movis := []MachineInstr{}
 	for id in 1 .. m.values.len {
 		if m.values[id].kind != .constant {
+			continue
+		}
+		if id !in sel.sym {
 			continue
 		}
 		r := sel.vreg_for(m, ssa.ValueID(id))!
 		v := const_int(m, ssa.ValueID(id))!
 		_ = int_width(m, m.values[id].typ)!
-		out.blocks[0].instrs << MachineInstr{
+		movis << MachineInstr{
 			op:      .movi
 			dst:     reg_operand(r)
 			has_dst: true
@@ -188,12 +217,11 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 			ssa_id:  id
 		}
 	}
-	for i, blk_id in f.blocks {
-		blk := m.blocks[int(blk_id)]
-		for val_id in blk.instrs {
-			sel.select_instr(m, val_id, mut out, i, blocks)!
-		}
-	}
+	// Materialized constants dominate every use from the top of the entry
+	// block. Entry moves are prepended ahead of these next.
+	mut with_consts := movis
+	with_consts << out.blocks[0].instrs
+	out.blocks[0].instrs = with_consts
 	// Entry moves: function parameters arrive per the calling convention.
 	// Register arguments move from their physical register; stack
 	// arguments load from the frame area (fp-bound later).
@@ -233,7 +261,79 @@ fn (mut sel MachineSelector) select_func(m &ssa.Module, f ssa.Function) !Machine
 		out.params << reg_operand(sel.vreg_for(m, p)!)
 		out.param_names << m.values[int(p)].name
 	}
+	fuse_branch_roundtrips(m, mut out)!
 	return out
+}
+
+// fuse_branch_roundtrips removes boolean round-trips: cmp a,b + setcc V +
+// cmp V,0 + jcc ne becomes cmp a,b + jcc cond when V's only user is the
+// branch. Selectors emit that exact adjacent shape for every br-on-compare;
+// the fused branch reuses the original condition, so the dead boolean never
+// materializes, never occupies a register, and never spills. Values with
+// other users are left alone. Runs pre-allocation on virtual registers.
+fn fuse_branch_roundtrips(m &ssa.Module, mut out MachineFunc) ! {
+	for bi in 0 .. out.blocks.len {
+		instrs := out.blocks[bi].instrs.clone()
+		mut kept := []MachineInstr{cap: instrs.len}
+		mut i := 0
+		for i < instrs.len {
+			if i + 3 < instrs.len && try_fuse_branch(m, instrs, i, mut kept) {
+				i += 4
+				continue
+			}
+			kept << instrs[i]
+			i++
+		}
+		out.blocks[bi].instrs = kept
+	}
+}
+
+// try_fuse_branch matches cmp+setcc+cmp+jcc at position i and appends the
+// fused pair when the boolean value is used only by the branch.
+fn try_fuse_branch(m &ssa.Module, instrs []MachineInstr, i int, mut kept []MachineInstr) bool {
+	a := instrs[i]
+	b := instrs[i + 1]
+	c := instrs[i + 2]
+	d := instrs[i + 3]
+	if a.op != .cmp || b.op != .setcc || c.op != .cmp || d.op != .jcc {
+		return false
+	}
+	if d.cond != .ne {
+		return false
+	}
+	if !b.has_dst || b.dst.kind != .reg || b.dst.reg.is_phys() {
+		return false
+	}
+	if c.srcs.len != 2 || c.srcs[0].kind != .reg || c.srcs[0].reg.is_phys() {
+		return false
+	}
+	if c.srcs[0].reg.virt != b.dst.reg.virt {
+		return false
+	}
+	if c.srcs[1].kind != .imm || c.srcs[1].imm != 0 {
+		return false
+	}
+	if b.ssa_id <= 0 || c.ssa_id <= 0 || b.ssa_id >= m.values.len {
+		return false
+	}
+	users := m.values[b.ssa_id].uses
+	if users.len != 1 || int(users[0]) != c.ssa_id {
+		return false
+	}
+	kept << MachineInstr{
+		op:     .cmp
+		srcs:   a.srcs
+		line:   a.line
+		ssa_id: a.ssa_id
+	}
+	kept << MachineInstr{
+		op:     .jcc
+		cond:   b.cond
+		target: d.target
+		line:   d.line
+		ssa_id: d.ssa_id
+	}
+	return true
 }
 
 // select_instr lowers one SSA instruction. blocks maps SSA block ids to
@@ -255,8 +355,8 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				return error('vir: bad binary operands')
 			}
 			_ = int_width(m, instr.typ)!
-			a := sel.vreg_for(m, instr.operands[0])!
-			b := sel.vreg_for(m, instr.operands[1])!
+			a := sel.operand_for(m, instr.operands[0])!
+			b := sel.operand_for(m, instr.operands[1])!
 			op := if instr.op == .add {
 				MachineOp.add
 			} else if instr.op == .sub {
@@ -268,25 +368,25 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				op:      .mov
 				dst:     reg_operand(dst)
 				has_dst: true
-				srcs:    [reg_operand(a)]
+				srcs:    [a]
 			}
 			emit << MachineInstr{
 				op:      op
 				dst:     reg_operand(dst)
 				has_dst: true
-				srcs:    [reg_operand(dst), reg_operand(b)]
+				srcs:    [reg_operand(dst), b]
 			}
 		}
 		.neg {
 			if instr.operands.len != 1 {
 				return error('vir: bad neg operands')
 			}
-			a := sel.vreg_for(m, instr.operands[0])!
+			a := sel.operand_for(m, instr.operands[0])!
 			emit << MachineInstr{
 				op:      .mov
 				dst:     reg_operand(dst)
 				has_dst: true
-				srcs:    [reg_operand(a)]
+				srcs:    [a]
 			}
 			emit << MachineInstr{
 				op:      .neg
@@ -300,10 +400,12 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				return error('vir: bad comparison operands')
 			}
 			a := sel.vreg_for(m, instr.operands[0])!
-			b := sel.vreg_for(m, instr.operands[1])!
+			// The right side takes any register/imm/memory form; the left
+			// side must stay in a register for the amd64 cmp encoding.
+			b := sel.operand_for(m, instr.operands[1])!
 			emit << MachineInstr{
 				op:   .cmp
-				srcs: [reg_operand(a), reg_operand(b)]
+				srcs: [reg_operand(a), b]
 			}
 			emit << MachineInstr{
 				op:      .setcc
@@ -372,12 +474,12 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				return error('vir: bad return operands')
 			}
 			if instr.operands.len == 1 {
-				v := sel.vreg_for(m, instr.operands[0])!
+				v := sel.operand_for(m, instr.operands[0])!
 				emit << MachineInstr{
 					op:      .mov
 					dst:     reg_operand(preg(sel.ret_reg))
 					has_dst: true
-					srcs:    [reg_operand(v)]
+					srcs:    [v]
 				}
 			}
 			emit << MachineInstr{ op: .ret }
@@ -397,14 +499,14 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			}
 			locs := target.assign_args(sel.cc, arg_kinds)!
 			for n, a in instr.operands[1..] {
-				v := sel.vreg_for(m, a)!
+				v := sel.operand_for(m, a)!
 				loc := locs[n]
 				if loc.has_reg {
 					emit << MachineInstr{
 						op:      .mov
 						dst:     reg_operand(preg(loc.reg))
 						has_dst: true
-						srcs:    [reg_operand(v)]
+						srcs:    [v]
 					}
 				} else {
 					return error('vir: stack call arguments need frame lowering')
@@ -439,11 +541,11 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			if instr.operands.len != 2 {
 				return error('vir: bad store operands')
 			}
-			v := sel.vreg_for(m, instr.operands[0])!
+			v := sel.operand_for(m, instr.operands[0])!
 			p := sel.vreg_for(m, instr.operands[1])!
 			emit << MachineInstr{
 				op:   .store
-				srcs: [mem_operand(p, 0), reg_operand(v)]
+				srcs: [mem_operand(p, 0), v]
 			}
 		}
 		.assign {
@@ -452,25 +554,25 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 				return error('vir: bad assign operands')
 			}
 			d := sel.vreg_for(m, instr.operands[0])!
-			a := sel.vreg_for(m, instr.operands[1])!
+			a := sel.operand_for(m, instr.operands[1])!
 			emit << MachineInstr{
 				op:      .mov
 				dst:     reg_operand(d)
 				has_dst: true
-				srcs:    [reg_operand(a)]
+				srcs:    [a]
 			}
 		}
 		.bitcast {
 			if instr.operands.len != 1 {
 				return error('vir: bad bitcast operands')
 			}
-			a := sel.vreg_for(m, instr.operands[0])!
+			a := sel.operand_for(m, instr.operands[0])!
 			_ = int_width(m, instr.typ)!
 			emit << MachineInstr{
 				op:      .mov
 				dst:     reg_operand(dst)
 				has_dst: true
-				srcs:    [reg_operand(a)]
+				srcs:    [a]
 			}
 		}
 		else {
