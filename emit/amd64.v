@@ -322,6 +322,16 @@ fn (mut e Emitter) emit_binop(ins mach.MachineInstr, mut ctx FuncCtx) ! {
 	if !ins.has_dst || ins.srcs.len != 2 {
 		return error('vir: ${ins.op} needs a destination and two sources')
 	}
+	// x86 has a three-operand imul: imul dst, reg, imm. When the first
+	// source is a register and the second an immediate, use it directly
+	// instead of copying the source into dst first (saves a mov + a uop).
+	if ins.op == .imul && ins.dst.kind == .reg && ins.srcs[0].kind == .reg
+		&& ins.srcs[1].kind == .imm {
+		dst_hw := e.hw_reg(ins.dst.reg)!
+		src_hw := e.hw_reg(ins.srcs[0].reg)!
+		e.emit_imul_reg_imm(dst_hw, src_hw, ins.srcs[1].imm)
+		return
+	}
 	if !same_operand(ins.srcs[0], ins.dst) {
 		e.emit_mov(mach.MachineInstr{
 			op:      .mov
@@ -761,6 +771,30 @@ fn (mut e Emitter) emit_imul_reg_mem(dst_hw int, base_hw int, disp int) {
 	e.emit(0x0F)
 	e.emit(0xAF)
 	e.emit_modrm_mem(dst_hw, base_hw, disp)
+}
+
+// emit_imul_reg_imm encodes imul dst, src, imm (three-operand form): reg=dst,
+// r/m=src, with 0x6B imm8 or 0x69 imm32. REX.R selects a high dst, REX.B a
+// high source.
+fn (mut e Emitter) emit_imul_reg_imm(dst_hw int, src_hw int, imm i64) {
+	mut rex := u8(0x48)
+	if dst_hw >= 8 {
+		rex |= 4 // REX.R: reg field (dst)
+	}
+	if src_hw >= 8 {
+		rex |= 1 // REX.B: r/m field (src)
+	}
+	e.emit(rex)
+	modrm := u8(0xC0 | ((dst_hw & 7) << 3) | (src_hw & 7))
+	if imm >= -128 && imm <= 127 {
+		e.emit(0x6B)
+		e.emit(modrm)
+		e.emit(u8(imm))
+	} else {
+		e.emit(0x69)
+		e.emit(modrm)
+		e.emit_u32(u32(imm))
+	}
 }
 
 // emit_imul_imm encodes the three-operand form imul dst, dst, imm using

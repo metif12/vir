@@ -316,3 +316,28 @@ fn test_emit_end_to_end() {
 	}
 	assert found
 }
+
+// test_emit_three_operand_imul checks that dst = reg*imm emits a single
+// imul (no prologue mov): 48 6B C1 03 = imul rax, rcx, 3.
+fn test_emit_three_operand_imul() {
+	rax := pr(0)
+	rcx := pr(1)
+	mut mm := mach.MachineModule{ triple: 'amd64-linux-gnu' }
+	mut f := mach.MachineFunc{ name: 'mul' }
+	mut b := mach.MachineBlock{ id: 0, name: 'entry' }
+	b.instrs << mach.MachineInstr{
+		op:      .imul
+		dst:     mach.reg_operand(rax)
+		has_dst: true
+		srcs:    [mach.reg_operand(rcx), mach.imm_operand(3)]
+	}
+	b.instrs << mach.MachineInstr{ op: .ret }
+	f.blocks << b
+	mm.funcs << f
+	t := target.parse_triple('amd64-linux-gnu')!
+	out := emit_amd64(mm, t)!
+	body := [u8(0x48), 0x6B, 0xC1, 0x03] // imul rax, rcx, 3
+	assert out.text[4..8] == body
+	// No extra mov opcode between prologue and the imul.
+	assert out.text.len == 4 + 4 + 5 // prologue + imul + mov rsp/rbp + pop + ret
+}

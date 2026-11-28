@@ -364,17 +364,29 @@ fn (mut sel MachineSelector) select_instr(m &ssa.Module, val_id ssa.ValueID, mut
 			} else {
 				MachineOp.imul
 			}
-			emit << MachineInstr{
-				op:      .mov
-				dst:     reg_operand(dst)
-				has_dst: true
-				srcs:    [a]
-			}
-			emit << MachineInstr{
-				op:      op
-				dst:     reg_operand(dst)
-				has_dst: true
-				srcs:    [reg_operand(dst), b]
+			// imul has a three-operand form (dst = reg * imm), so skip the
+			// copy into dst when the left source is a register and the
+			// right an immediate. add/sub only have two-operand forms.
+			if op == .imul && a.kind == .reg && b.kind == .imm {
+				emit << MachineInstr{
+					op:      .imul
+					dst:     reg_operand(dst)
+					has_dst: true
+					srcs:    [a, b]
+				}
+			} else {
+				emit << MachineInstr{
+					op:      .mov
+					dst:     reg_operand(dst)
+					has_dst: true
+					srcs:    [a]
+				}
+				emit << MachineInstr{
+					op:      op
+					dst:     reg_operand(dst)
+					has_dst: true
+					srcs:    [reg_operand(dst), b]
+				}
 			}
 		}
 		.neg {
